@@ -135,7 +135,7 @@ Writes a PNG to `output/` and prints the current position of every symbol.
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 31 tests
+uv run pytest                 # 35 tests
 ```
 
 Daily closes are cached under `.cache/` for 20 hours, so repeated runs during

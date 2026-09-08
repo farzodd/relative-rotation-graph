@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+uv.lock
+.pytest_cache/
+.cache/
+output/

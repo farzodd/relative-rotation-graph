@@ -1,0 +1,66 @@
+# Single source of truth for the RRG run.
+# Every value here is mirrored in the README config table. Change both together.
+
+[universe]
+benchmark = "SPY"
+# The 11 SPDR select sector funds. XLRE (2015) and XLC (2018) are younger than
+# the rest; with a 5y lookback both have ample history, but the validator will
+# name them first if the lookback is ever widened.
+symbols = [
+    "XLB",   # Materials
+    "XLC",   # Communication Services
+    "XLE",   # Energy
+    "XLF",   # Financials
+    "XLI",   # Industrials
+    "XLK",   # Technology
+    "XLP",   # Consumer Staples
+    "XLRE",  # Real Estate
+    "XLU",   # Utilities
+    "XLV",   # Health Care
+    "XLY",   # Consumer Discretionary
+]
+
+[universe.labels]
+XLB = "Materials"
+XLC = "Comm Svcs"
+XLE = "Energy"
+XLF = "Financials"
+XLI = "Industrials"
+XLK = "Technology"
+XLP = "Staples"
+XLRE = "Real Estate"
+XLU = "Utilities"
+XLV = "Health Care"
+XLY = "Discretionary"
+
+[data]
+# "tiingo" needs TIINGO_API_KEY in the environment. "yfinance" needs no key.
+provider = "yfinance"
+# Weekly bars, week ending Friday. Resampled from daily adjusted closes rather
+# than requested as weekly, so the provider's week convention can't surprise us.
+interval = "weekly"
+week_anchor = "W-FRI"
+lookback_years = 5
+cache_dir = ".cache"
+# Reuse cached daily closes younger than this instead of re-hitting the API.
+cache_max_age_hours = 20
+
+[method]
+ema_short = 10
+ema_long = 30
+ema_momentum = 10
+
+# "cross_sectional" scores each security against its peers on each date.
+# "time_series" scores each security against its own history.
+# These are not comparable. Do not mix them across runs.
+normalization = "cross_sectional"
+
+# Only used when normalization = "time_series". Ignored otherwise.
+zscore_window = 60
+
+[chart]
+tail_length = 12
+output_dir = "output"
+figure_width = 11.0
+figure_height = 9.0
+dpi = 160

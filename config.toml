@@ -64,3 +64,37 @@ output_dir = "output"
 figure_width = 11.0
 figure_height = 9.0
 dpi = 160
+
+# --------------------------------------------------------------------------
+# Profiles
+# --------------------------------------------------------------------------
+# Named overrides of [method] and [chart]. Everything else — universe,
+# benchmark, bar interval, data source — is shared, so the three views are
+# genuinely the same data seen at different speeds and stay comparable.
+#
+# The tradeoff they span is responsiveness against stability. A shorter EMA
+# pair crosses quadrant boundaries earlier and more often; some of those extra
+# crossings are real rotations caught early and some are noise, and no setting
+# separates the two in advance. Compare them on the diagnostics table, not on
+# which chart looks tidier.
+
+[profiles.fast]
+description = "Quadrant-entry optimised: crosses early, at the cost of more false crossings."
+ema_short = 5
+ema_long = 15
+ema_momentum = 5
+tail_length = 8
+
+[profiles.balanced]
+description = "Middle ground. The original settings this project was specified with."
+ema_short = 10
+ema_long = 30
+ema_momentum = 10
+tail_length = 12
+
+[profiles.slow]
+description = "Tail direction and speed optimised: smooth trajectories, later signals."
+ema_short = 13
+ema_long = 40
+ema_momentum = 13
+tail_length = 16

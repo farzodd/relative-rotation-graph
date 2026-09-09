@@ -45,6 +45,8 @@ class Config:
     dpi: int
 
     root: Path = field(default_factory=Path.cwd)
+    profile: str = ""
+    profile_description: str = ""
 
     def label(self, symbol: str) -> str:
         return self.labels.get(symbol, symbol)
@@ -72,8 +74,9 @@ class Config:
 
     def stamp(self) -> str:
         """One-line provenance string for the chart footer."""
+        prefix = f"profile {self.profile} | " if self.profile else ""
         return (
-            f"{self.interval} bars | EMA {self.ema_short}/{self.ema_long}/{self.ema_momentum} "
+            f"{prefix}{self.interval} bars | EMA {self.ema_short}/{self.ema_long}/{self.ema_momentum} "
             f"| {self.normalization} | tail {self.tail_length} | source {self.provider}"
         )
 
@@ -84,7 +87,15 @@ def _require(table: dict, key: str, where: str):
     return table[key]
 
 
-def load_config(path: str | Path = "config.toml") -> Config:
+def profile_names(path: str | Path = "config.toml") -> list[str]:
+    """Profiles declared in config.toml, in declaration order."""
+    path = Path(path).expanduser().resolve()
+    with path.open("rb") as fh:
+        raw = tomllib.load(fh)
+    return list(raw.get("profiles", {}))
+
+
+def load_config(path: str | Path = "config.toml", profile: str | None = None) -> Config:
     path = Path(path).expanduser().resolve()
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
@@ -95,8 +106,30 @@ def load_config(path: str | Path = "config.toml") -> Config:
     root = path.parent
     universe = _require(raw, "universe", "root")
     data = _require(raw, "data", "root")
-    method = _require(raw, "method", "root")
-    chart = _require(raw, "chart", "root")
+    method = dict(_require(raw, "method", "root"))
+    chart = dict(_require(raw, "chart", "root"))
+
+    profile_description = ""
+    if profile is not None:
+        profiles = raw.get("profiles", {})
+        if profile not in profiles:
+            known = ", ".join(profiles) or "none declared"
+            raise ConfigError(f"config.toml: unknown profile {profile!r} (have: {known})")
+        overrides = dict(profiles[profile])
+        profile_description = str(overrides.pop("description", ""))
+        # A profile may override anything in [method] or [chart]; the universe,
+        # benchmark, and data source stay shared so profiles remain comparable.
+        unknown = set(overrides) - set(method) - set(chart) - {"tail_length"}
+        if unknown:
+            raise ConfigError(
+                f"config.toml: profile {profile!r} sets unknown key(s): {', '.join(sorted(unknown))}. "
+                "Profiles may only override [method] and [chart] settings."
+            )
+        for key, value in overrides.items():
+            if key in chart or key == "tail_length":
+                chart[key] = value
+            else:
+                method[key] = value
 
     benchmark = _require(universe, "benchmark", "universe")
     symbols = tuple(dict.fromkeys(_require(universe, "symbols", "universe")))
@@ -131,6 +164,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
         figure_height=float(chart.get("figure_height", 9.0)),
         dpi=int(chart.get("dpi", 160)),
         root=root,
+        profile=profile or "",
+        profile_description=profile_description,
     )
 
     _validate(cfg)

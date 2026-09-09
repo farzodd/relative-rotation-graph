@@ -121,9 +121,11 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
         spine.set_color("#bbbbbb")
 
     as_of = result.as_of.date()
+    heading = f"Relative Rotation Graph vs {result.benchmark_symbol}"
+    if cfg.profile:
+        heading += f"  —  {cfg.profile}"
     ax.set_title(
-        f"Relative Rotation Graph vs {result.benchmark_symbol}\n"
-        f"{cfg.tail_length}-period tail, as of {as_of}",
+        f"{heading}\n{cfg.tail_length}-period tail, as of {as_of}",
         fontsize=13.5, fontweight="bold", pad=14,
     )
 
@@ -145,7 +147,10 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
 
     if path is None:
         cfg.output_dir.mkdir(parents=True, exist_ok=True)
-        path = cfg.output_dir / f"rrg_{result.benchmark_symbol.lower()}_{as_of}.png"
+        # The profile belongs in the filename: without it, rendering every
+        # profile in one run has each overwrite the last.
+        suffix = f"_{cfg.profile}" if cfg.profile else ""
+        path = cfg.output_dir / f"rrg_{result.benchmark_symbol.lower()}{suffix}_{as_of}.png"
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

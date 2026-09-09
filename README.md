@@ -74,8 +74,8 @@ Single source of truth is [`config.toml`](config.toml). This table mirrors it; c
 | Benchmark | SPY |
 | Universe | 11 SPDR select sector funds (XLB XLC XLE XLF XLI XLK XLP XLRE XLU XLV XLY) |
 | Bar interval | Weekly, week ending Friday, resampled locally from daily closes |
-| Tail length (N periods) | 12 |
-| EMA_short / EMA_long / EMA_mom | 10 / 30 / 10 |
+| Tail length (N periods) | 12 (`balanced`; see Profiles) |
+| EMA_short / EMA_long / EMA_mom | 10 / 30 / 10 (`balanced`; see Profiles) |
 | Z-score window | 60 (only used by time-series normalization) |
 | Normalization basis | Cross-sectional |
 | Data source | yfinance by default (no key); Tiingo via `provider = "tiingo"` |
@@ -132,11 +132,45 @@ uv run rrg
 Writes a PNG to `output/` and prints the current position of every symbol.
 
 ```
+uv run rrg --profile fast     # one named profile
+uv run rrg --all-profiles     # every profile, plus a diagnostics comparison
+uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 35 tests
+uv run pytest                 # 48 tests
 ```
+
+## Profiles
+
+Three named settings in `config.toml` override `[method]` and `[chart]` while
+sharing the universe, benchmark, bar interval, and data source — so the outputs
+are the same data seen at different speeds, and stay comparable. A profile that
+tried to change the universe is rejected at load.
+
+| Profile | EMA | Tail | Intent |
+|---|---|---|---|
+| `fast` | 5/15/5 | 8 | Crosses quadrant boundaries early, accepts more false crossings |
+| `balanced` | 10/30/10 | 12 | The original specification |
+| `slow` | 13/40/13 | 16 | Smooth, legible tails; later signals |
+
+### Choosing between them
+
+`--all-profiles` prints diagnostics so the choice rests on numbers:
+
+- **signals/yr** — quadrant crossings per symbol per year. Responsiveness.
+- **median dwell** — how long a symbol stays put once it crosses. If dwell is
+  shorter than your review cadence, you are reacting to states that have
+  already passed.
+- **reversal rate** — crossings that return to the previous quadrant within four
+  bars. The false-signal rate, and the price of responsiveness.
+- **mom spread** — width of the RS-Momentum axis across the universe. A narrow
+  spread means genuine turns and noise look alike.
+
+These describe the *indicator*: whether it is stable and legible. They say
+nothing about whether it predicts returns. The forward-return table printed
+alongside them is one five-year window on one universe with no costs — a
+description of what happened, not evidence of an edge.
 
 Daily closes are cached under `.cache/` for 20 hours, so repeated runs during
 development do not re-hit the provider.

@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 NORMALIZATIONS = ("cross_sectional", "time_series", "absolute")
-RATIO_BASES = ("ema_spread", "rolling_return")
 PROVIDERS = ("tiingo", "yfinance")
 
 
@@ -36,8 +35,6 @@ class Config:
     ema_short: int
     ema_long: int
     ema_momentum: int
-    ratio_basis: str
-    ratio_window: int
     normalization: str
     zscore_window: int
     sigma_multiple: float
@@ -79,10 +76,7 @@ class Config:
         Cross-sectional does not, because it scores across the universe on each
         date; absolute does not, because it divides by a constant.
         """
-        if self.ratio_basis == "rolling_return":
-            warmup = 3 * self.ema_short + self.ratio_window + 3 * self.ema_momentum
-        else:
-            warmup = 3 * self.ema_long + 3 * self.ema_momentum
+        warmup = 3 * self.ema_long + 3 * self.ema_momentum
         if self.normalization == "time_series":
             warmup += self.zscore_window
         return warmup + self.tail_length
@@ -91,11 +85,7 @@ class Config:
         """One-line provenance string for the chart footer."""
         prefix = f"profile {self.profile} | " if self.profile else ""
         return (
-            f"{prefix}{self.interval} bars | "
-            + (f"rolling {self.ratio_window}-bar return, EMA_mom {self.ema_momentum} "
-               if self.ratio_basis == "rolling_return"
-               else f"EMA {self.ema_short}/{self.ema_long}/{self.ema_momentum} ")
-            + 
+            f"{prefix}{self.interval} bars | EMA {self.ema_short}/{self.ema_long}/{self.ema_momentum} "
             f"| {self.normalization} | tail {self.tail_length} | source {self.provider}"
         )
 
@@ -182,8 +172,6 @@ def load_config(
         ema_short=int(_require(method, "ema_short", "method")),
         ema_long=int(_require(method, "ema_long", "method")),
         ema_momentum=int(_require(method, "ema_momentum", "method")),
-        ratio_basis=method.get("ratio_basis", "ema_spread"),
-        ratio_window=int(method.get("ratio_window", 26)),
         normalization=_require(method, "normalization", "method"),
         zscore_window=int(method.get("zscore_window", 60)),
         sigma_multiple=float(method.get("sigma_multiple", 2.0)),
@@ -223,12 +211,6 @@ def _validate(cfg: Config) -> None:
         )
     if min(cfg.ema_short, cfg.ema_long, cfg.ema_momentum) < 2:
         raise ConfigError("config.toml: EMA spans must be >= 2")
-    if cfg.ratio_basis not in RATIO_BASES:
-        raise ConfigError(
-            f"config.toml: ratio_basis {cfg.ratio_basis!r} not one of {RATIO_BASES}"
-        )
-    if cfg.ratio_window < 2:
-        raise ConfigError("config.toml: ratio_window must be >= 2 bars")
     if cfg.axis_scale not in ("linear", "asinh"):
         raise ConfigError(
             f"config.toml: axis_scale {cfg.axis_scale!r} not 'linear' or 'asinh'"

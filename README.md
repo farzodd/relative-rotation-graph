@@ -31,15 +31,14 @@ Computed in this order, on adjusted closes:
 
 ```
 1. RS           = 100 * (price_security / price_benchmark)
-2. raw_ratio    = 100 * ((EMA_short(RS) - EMA_long(RS)) / EMA_long(RS) + 1)   [ema_spread]
-              or 100 * EMA_short(RS) / EMA_short(RS).shift(ratio_window)      [rolling_return]
+2. raw_ratio    = 100 * ((EMA_short(RS) - EMA_long(RS)) / EMA_long(RS) + 1)
 3. RS_Ratio     = 100 + scale(raw_ratio)
 4. raw_mom      = 100 * (RS_Ratio / EMA_mom(RS_Ratio))
 5. RS_Momentum  = 100 + scale(raw_mom)
 ```
 
-Step 2 has two forms, selected by `ratio_basis`; step 3 and 5 have three, selected
-by `normalization`. Both choices are described below and stamped on every chart.
+Steps 3 and 5 have three forms, selected by `normalization`, described below and
+stamped on every chart.
 
 ### What RS-Ratio actually measures
 
@@ -48,8 +47,8 @@ An earlier version of this section claimed a steadily-outperforming security
 stating plainly because it is the kind of error that makes a reader distrust a
 chart that is behaving correctly.
 
-Four constructed cases, five years of weekly bars, measured under
-`ratio_basis = "ema_spread"` (`tests/test_ratio_basis.py`):
+Four constructed cases, five years of weekly bars, measured in
+`tests/test_scenarios.py`:
 
 | | cumulative vs benchmark | last 13 weeks | x-axis |
 |---|---|---|---|
@@ -70,28 +69,8 @@ answers a different question than a rotation chart is asking.
 What *is* true is narrower: the x-axis measures a **rate**, and its effective
 lookback is emergent rather than chosen. At EMA 10/30 it behaves like a 26–52
 week relative return (rank correlation +0.94 and +0.92); at 5/15 it is closer to
-4 weeks and noisier. You cannot ask it for "the last quarter".
-
-### Choosing the lookback explicitly
-
-`ratio_basis = "rolling_return"` replaces the EMA spread with relative
-performance over exactly `ratio_window` bars:
-
-```
-raw_ratio = 100 * EMA_short(RS) / EMA_short(RS).shift(ratio_window)
-```
-
-Right of centre then means "beat the benchmark over that window", with the
-window a number you set rather than a consequence of the EMA spans. The EMA
-smooths both ends so one noisy bar cannot swing the reading.
-
-It does not reorder the cases above — but it does space them differently, giving
-the sustained performer 81% of the breakout's reading against `ema_spread`'s
-63%. Consistency is rewarded more.
-
-`ema_spread` remains the default because it is the published approximation and
-what other RRG implementations use. Choose `rolling_return` when you want the
-timeframe stated rather than inferred.
+4 weeks and noisier. Worth knowing when reading it, but it does not bury a
+consistent performer.
 
 ### On normalization
 
@@ -194,7 +173,7 @@ Single source of truth is [`config.toml`](config.toml). This table mirrors it; c
 | Tail length (N periods) | 12 (`balanced`; see Profiles) |
 | EMA_short / EMA_long / EMA_mom | 10 / 30 / 10 (`balanced`; see Profiles) |
 | Z-score window | 60 (only used by time-series normalization) |
-| Normalization basis | Cross-sectional; `absolute` available (see below) |
+| Normalization basis | **Absolute** (default); `cross_sectional` via the `fast`/`balanced` profiles |
 | Data source | yfinance by default (no key); Tiingo via `provider = "tiingo"` |
 | Report format | Not yet implemented |
 | Cadence | Not yet implemented |
@@ -270,6 +249,8 @@ uv run rrg
 ```
 
 Writes a PNG to `output/` and prints the current position of every symbol.
+The bare command gives the **absolute** view: each member measured against the
+benchmark, which sits on the origin.
 
 ```
 uv run rrg --profile fast     # one named profile
@@ -279,7 +260,7 @@ uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 84 tests
+uv run pytest                 # 74 tests
 ```
 
 ## Profiles
@@ -296,7 +277,6 @@ tried to change the universe is rejected at load.
 | `absolute` | 10/30/10 | 12 | Measured against the benchmark, not peers |
 | `absolute_fast` | 5/15/5 | 8 | Absolute basis, earliest read |
 | `absolute_asinh` | 10/30/10 | 12 | Absolute on non-linear axes |
-| `absolute_window` | 10/–/10 | 12 | Absolute, x-axis is an explicit 26-week relative return |
 
 ### Choosing between them
 

@@ -30,8 +30,6 @@ def make_config(**overrides) -> Config:
         ema_short=10,
         ema_long=30,
         ema_momentum=10,
-        ratio_basis="ema_spread",
-        ratio_window=26,
         normalization="cross_sectional",
         zscore_window=60,
         sigma_multiple=2.0,

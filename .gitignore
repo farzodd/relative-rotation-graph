@@ -5,3 +5,7 @@ uv.lock
 .pytest_cache/
 .cache/
 output/
+
+# Claude per-project memory (local, not published)
+.claude/memory/
+.claude/settings.local.json

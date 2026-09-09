@@ -11,7 +11,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-NORMALIZATIONS = ("cross_sectional", "time_series")
+NORMALIZATIONS = ("cross_sectional", "time_series", "absolute")
 PROVIDERS = ("tiingo", "yfinance")
 
 
@@ -37,6 +37,7 @@ class Config:
     ema_momentum: int
     normalization: str
     zscore_window: int
+    sigma_multiple: float
 
     tail_length: int
     output_dir: Path
@@ -55,6 +56,10 @@ class Config:
     def is_cross_sectional(self) -> bool:
         return self.normalization == "cross_sectional"
 
+    @property
+    def is_absolute(self) -> bool:
+        return self.normalization == "absolute"
+
     def warmup_bars(self) -> int:
         """Bars consumed before the first trustworthy RRG point.
 
@@ -63,12 +68,12 @@ class Config:
         in sequence here (EMA_long on RS, then EMA_momentum on RS_Ratio), so
         their warmups add. The tail then needs its own bars on top.
 
-        Time-series normalization additionally consumes a full z-score window;
-        cross-sectional does not, because it scores across the universe on each
-        date rather than across history.
+        Time-series normalization additionally consumes a full z-score window.
+        Cross-sectional does not, because it scores across the universe on each
+        date; absolute does not, because it divides by a constant.
         """
         warmup = 3 * self.ema_long + 3 * self.ema_momentum
-        if not self.is_cross_sectional:
+        if self.normalization == "time_series":
             warmup += self.zscore_window
         return warmup + self.tail_length
 
@@ -158,6 +163,7 @@ def load_config(path: str | Path = "config.toml", profile: str | None = None) ->
         ema_momentum=int(_require(method, "ema_momentum", "method")),
         normalization=_require(method, "normalization", "method"),
         zscore_window=int(method.get("zscore_window", 60)),
+        sigma_multiple=float(method.get("sigma_multiple", 2.0)),
         tail_length=int(chart.get("tail_length", 12)),
         output_dir=root / chart.get("output_dir", "output"),
         figure_width=float(chart.get("figure_width", 11.0)),

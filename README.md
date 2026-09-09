@@ -58,12 +58,63 @@ reasons output will not match StockCharts.
 
 ### On normalization
 
-Step 3 and step 5 can z-score two different ways, and the choice materially changes the chart:
+Step 3 and step 5 can be scaled three ways, and the choice materially changes
+what the chart is capable of showing:
 
-- **Time-series** — each security against its own history. Positioning is roughly absolute.
-- **Cross-sectional** — every security against the rest of the universe on each date. Positioning is relative to the peer group.
+- **Cross-sectional** — every security against the rest of the universe on each
+  date. Positioning is relative to the peer group.
+- **Time-series** — each security against its own history.
+- **Absolute** — divide by a constant. Positioning is relative to the benchmark.
 
-Neither is wrong. Mixing them across runs makes tails incomparable. This project picks one and records it in the config.
+Mixing them across runs makes tails incomparable. The config records which is in
+use and the chart footer stamps it.
+
+### What cross-sectional scoring cannot show
+
+Dividing by a per-date statistic re-centres the universe on 100 every bar. It is
+a ranking, not a measurement — someone is always top of the class, including
+when the whole class is failing. Measured over 143 weeks of the sector universe:
+
+| | range | std |
+|---|---|---|
+| Sectors actually beating SPY (trailing quarter) | 0 → 10 of 11 | 2.58 |
+| Sectors the chart placed in the right half | 3 → 7 of 11 | 0.80 |
+
+Correlation between the two: **−0.10**. On the 25 weeks when at most one sector
+was beating SPY, the chart still showed a median of five in the right half.
+
+So the question "is anything beating the benchmark, or should I just hold the
+benchmark?" is one cross-sectional mode discards by construction.
+
+### Absolute mode
+
+`normalization = "absolute"` divides by a single constant instead:
+
+```
+scale     = sigma_multiple * max over members of std(raw_ratio)
+RS_Ratio  = 100 + (raw_ratio - 100) / scale
+```
+
+One constant for the whole universe and the whole history. Consequences:
+
+- **The benchmark is the origin.** Its RS against itself is flat, so `raw_ratio`
+  is exactly 100 — it lands on the crosshair with no special-casing, and is
+  drawn on the chart. The un-normalized quantity correlates **+0.60** with true
+  breadth, against −0.10 for the cross-sectional version.
+- **Every member may lag at once**, which is the point.
+- **`1.0` on an axis is a `sigma_multiple`-sigma move** of the widest member, so
+  the axes read −1 to +1 and the frame is held at ±1 even on a quiet week.
+- Each axis gets its own constant; the two quantities have unrelated natural
+  spreads and sharing a divisor would flatten one into a line.
+
+The divisor is recomputed from the loaded history on each run, so it drifts
+slowly as data accumulates, and it is stamped on the chart footer. A *rolling*
+divisor was considered and rejected: re-scaling by something that moves would
+reintroduce the exact defect above, in the time dimension rather than the
+cross-section.
+
+The two modes answer different questions. Absolute: "should I be in this asset
+class at all." Cross-sectional: "which member within it." Run both.
 
 ## Configuration
 
@@ -72,12 +123,12 @@ Single source of truth is [`config.toml`](config.toml). This table mirrors it; c
 | Parameter | Value |
 |---|---|
 | Benchmark | SPY |
-| Universe | 11 SPDR select sector funds (XLB XLC XLE XLF XLI XLK XLP XLRE XLU XLV XLY) |
+| Universe | 11 SPDR sectors + ITA (aerospace/defense) + SMH (semiconductors) |
 | Bar interval | Weekly, week ending Friday, resampled locally from daily closes |
 | Tail length (N periods) | 12 (`balanced`; see Profiles) |
 | EMA_short / EMA_long / EMA_mom | 10 / 30 / 10 (`balanced`; see Profiles) |
 | Z-score window | 60 (only used by time-series normalization) |
-| Normalization basis | Cross-sectional |
+| Normalization basis | Cross-sectional; `absolute` available (see below) |
 | Data source | yfinance by default (no key); Tiingo via `provider = "tiingo"` |
 | Report format | Not yet implemented |
 | Cadence | Not yet implemented |
@@ -138,7 +189,7 @@ uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 48 tests
+uv run pytest                 # 60 tests
 ```
 
 ## Profiles
@@ -153,6 +204,7 @@ tried to change the universe is rejected at load.
 | `fast` | 5/15/5 | 8 | Crosses quadrant boundaries early, accepts more false crossings |
 | `balanced` | 10/30/10 | 12 | The original specification |
 | `slow` | 13/40/13 | 16 | Smooth, legible tails; later signals |
+| `absolute` | 10/30/10 | 12 | Measured against the benchmark, not peers |
 
 ### Choosing between them
 

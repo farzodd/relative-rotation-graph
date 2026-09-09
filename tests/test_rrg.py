@@ -32,6 +32,7 @@ def make_config(**overrides) -> Config:
         ema_momentum=10,
         normalization="cross_sectional",
         zscore_window=60,
+        sigma_multiple=2.0,
         tail_length=5,
         output_dir=None,
         figure_width=11.0,

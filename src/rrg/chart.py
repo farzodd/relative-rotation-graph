@@ -15,6 +15,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless: this runs unattended
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.lines import Line2D
 
@@ -29,21 +30,35 @@ QUADRANT_STYLE = {
     "Improving": ("#2b6cb0", "#e8f0fa"),
 }
 
-# Distinguishable at 11 colours without relying on hue alone to separate
-# neighbours in the legend.
+# One entry per universe member. The list wraps if the universe outgrows it,
+# and a wrapped colour is a real defect — two series become indistinguishable in
+# both the plot and the legend — so keep this comfortably longer than the
+# universe. 16 entries against a 13-member universe today.
 SERIES_COLORS = [
     "#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b",
-    "#e377c2", "#17becf", "#7f7f7f", "#bcbd22", "#393b79",
+    "#e377c2", "#17becf", "#7f7f7f", "#bcbd22", "#393b79", "#00857c",
+    "#b5179e", "#5c4033", "#4361ee", "#f77f00",
 ]
 
 
 def _limits(result: RRGResult) -> tuple[float, float]:
-    """Symmetric bounds about 100 covering every plotted point."""
+    """Symmetric bounds about 100 covering every plotted point.
+
+    In absolute mode the axis unit is already a sigma_multiple-sigma move, so
+    +-1 is the natural frame and is held even when the data sits well inside it
+    — a quiet week should look quiet, not be zoomed until it looks dramatic.
+    The frame still expands if something exceeds it.
+    """
     n = result.config.tail_length
     xs = result.rs_ratio.iloc[-n:].to_numpy()
     ys = result.rs_momentum.iloc[-n:].to_numpy()
     reach = float(np.nanmax(np.abs(np.concatenate([xs, ys]) - 100.0)))
-    pad = max(reach * 0.18, 0.15)
+
+    if result.config.is_absolute:
+        reach = max(reach, 1.0)
+        pad = 0.06 * reach
+    else:
+        pad = max(reach * 0.18, 0.15)
     return 100.0 - reach - pad, 100.0 + reach + pad
 
 
@@ -112,8 +127,32 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
 
     ax.set_xlim(lo, hi)
     ax.set_ylim(lo, hi)
-    ax.set_xlabel("RS-Ratio  (relative strength vs benchmark)", fontsize=10.5)
-    ax.set_ylabel("RS-Momentum  (rate of change of relative strength)", fontsize=10.5)
+
+    if cfg.is_absolute:
+        # Coordinates are stored centred on 100 so quadrant logic stays shared,
+        # but the reader wants the deviation, which is the meaningful quantity.
+        offset = mticker.FuncFormatter(lambda v, _: f"{v - 100:+.2f}".rstrip("0").rstrip("."))
+        ax.xaxis.set_major_formatter(offset)
+        ax.yaxis.set_major_formatter(offset)
+        unit = f"{cfg.sigma_multiple:g}σ of the widest member"
+        ax.set_xlabel(f"RS-Ratio vs {result.benchmark_symbol}   (1.0 = {unit})", fontsize=10.5)
+        ax.set_ylabel(f"RS-Momentum   (1.0 = {unit})", fontsize=10.5)
+
+        # The benchmark's RS against itself is flat, so it lands exactly on the
+        # origin. Drawing it makes "everything is below the benchmark" legible
+        # as a picture rather than something to infer from the numbers.
+        ax.scatter(
+            100, 100, s=190, marker="P", color="#2b2b2b",
+            edgecolor="white", linewidth=1.6, zorder=7,
+        )
+        ax.annotate(
+            result.benchmark_symbol, (100, 100),
+            textcoords="offset points", xytext=(11, -16),
+            fontsize=9.5, fontweight="bold", color="#2b2b2b", zorder=7,
+        )
+    else:
+        ax.set_xlabel("RS-Ratio  (relative strength vs benchmark)", fontsize=10.5)
+        ax.set_ylabel("RS-Momentum  (rate of change of relative strength)", fontsize=10.5)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True, ls=":", lw=0.5, color="#9a9a9a", alpha=0.4, zorder=1)
     ax.set_axisbelow(True)
@@ -135,6 +174,8 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
     )
 
     footer = cfg.stamp()
+    if cfg.is_absolute and result.scale_ratio:
+        footer += (f"  |  scale x{result.scale_ratio:.3f} y{result.scale_momentum:.3f}")
     if result.dropped:
         footer += f"  |  dropped: {', '.join(sorted(result.dropped))}"
     fig.text(0.5, 0.015, footer, ha="center", fontsize=7.5, color="#666666")

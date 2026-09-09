@@ -104,7 +104,11 @@ def profile_names(path: str | Path = "config.toml") -> list[str]:
     return list(raw.get("profiles", {}))
 
 
-def load_config(path: str | Path = "config.toml", profile: str | None = None) -> Config:
+def load_config(
+    path: str | Path = "config.toml",
+    profile: str | None = None,
+    benchmark: str | None = None,
+) -> Config:
     path = Path(path).expanduser().resolve()
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
@@ -140,7 +144,10 @@ def load_config(path: str | Path = "config.toml", profile: str | None = None) ->
             else:
                 method[key] = value
 
-    benchmark = _require(universe, "benchmark", "universe")
+    # An explicit override beats the file. Deliberately not a profile field:
+    # profiles are meant to stay comparable, and changing the benchmark
+    # relocates the origin for everyone.
+    benchmark = benchmark or _require(universe, "benchmark", "universe")
     symbols = tuple(dict.fromkeys(_require(universe, "symbols", "universe")))
 
     if not symbols:

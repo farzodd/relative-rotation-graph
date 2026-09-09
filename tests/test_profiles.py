@@ -86,6 +86,25 @@ def test_profiles_share_universe_and_benchmark(tmp_path):
     assert fast.normalization == slow.normalization
 
 
+def test_benchmark_override_beats_the_file(tmp_path):
+    cfg = load_config(write(tmp_path, BASE), benchmark="RSP")
+    assert cfg.benchmark == "RSP"
+    assert load_config(write(tmp_path, BASE)).benchmark == "SPY"
+
+
+def test_benchmark_override_still_cannot_collide_with_the_universe(tmp_path):
+    """The override must not bypass validation — a benchmark inside the universe
+    has constant RS against itself and distorts the whole cross-section."""
+    with pytest.raises(ConfigError, match="also appears in the universe"):
+        load_config(write(tmp_path, BASE), benchmark="XLK")
+
+
+def test_benchmark_override_composes_with_a_profile(tmp_path):
+    cfg = load_config(write(tmp_path, BASE), profile="fast", benchmark="RSP")
+    assert cfg.benchmark == "RSP"
+    assert cfg.ema_short == 5
+
+
 def test_unknown_profile_names_the_available_ones(tmp_path):
     with pytest.raises(ConfigError, match="fast, slow"):
         load_config(write(tmp_path, BASE), profile="turbo")

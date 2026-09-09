@@ -138,13 +138,6 @@ ema_long = 30
 ema_momentum = 10
 tail_length = 12
 
-[profiles.slow]
-description = "Tail direction and speed optimised: smooth trajectories, later signals."
-ema_short = 13
-ema_long = 40
-ema_momentum = 13
-tail_length = 16
-
 # Same speed as `balanced`, different question. The three profiles above ask
 # "which member is rotating where relative to the others"; this one asks "is any
 # of them beating the benchmark at all". Its coordinates are not comparable with
@@ -168,3 +161,13 @@ ema_short = 10
 ema_long = 30
 ema_momentum = 10
 tail_length = 12
+
+# Absolute basis at the fast profile's speed. The reactive view: is anything
+# beating the benchmark, answered as early as the data allows.
+[profiles.absolute_fast]
+description = "Absolute basis, fast EMAs. Earliest read on whether anything is beating the benchmark."
+normalization = "absolute"
+ema_short = 5
+ema_long = 15
+ema_momentum = 5
+tail_length = 8

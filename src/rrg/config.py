@@ -38,12 +38,16 @@ class Config:
     normalization: str
     zscore_window: int
     sigma_multiple: float
+    scale_percentile: float
 
     tail_length: int
     output_dir: Path
     figure_width: float
     figure_height: float
     dpi: int
+    frame_limit: float
+    axis_scale: str
+    asinh_linear_width: float
 
     root: Path = field(default_factory=Path.cwd)
     profile: str = ""
@@ -164,11 +168,15 @@ def load_config(path: str | Path = "config.toml", profile: str | None = None) ->
         normalization=_require(method, "normalization", "method"),
         zscore_window=int(method.get("zscore_window", 60)),
         sigma_multiple=float(method.get("sigma_multiple", 2.0)),
+        scale_percentile=float(method.get("scale_percentile", 75.0)),
         tail_length=int(chart.get("tail_length", 12)),
         output_dir=root / chart.get("output_dir", "output"),
         figure_width=float(chart.get("figure_width", 11.0)),
         figure_height=float(chart.get("figure_height", 9.0)),
         dpi=int(chart.get("dpi", 160)),
+        frame_limit=float(chart.get("frame_limit", 1.25)),
+        axis_scale=chart.get("axis_scale", "linear"),
+        asinh_linear_width=float(chart.get("asinh_linear_width", 0.35)),
         root=root,
         profile=profile or "",
         profile_description=profile_description,
@@ -196,6 +204,16 @@ def _validate(cfg: Config) -> None:
         )
     if min(cfg.ema_short, cfg.ema_long, cfg.ema_momentum) < 2:
         raise ConfigError("config.toml: EMA spans must be >= 2")
+    if cfg.axis_scale not in ("linear", "asinh"):
+        raise ConfigError(
+            f"config.toml: axis_scale {cfg.axis_scale!r} not 'linear' or 'asinh'"
+        )
+    if not 0 < cfg.scale_percentile <= 100:
+        raise ConfigError(
+            f"config.toml: scale_percentile must be in (0, 100], got {cfg.scale_percentile}"
+        )
+    if cfg.frame_limit <= 0:
+        raise ConfigError("config.toml: frame_limit must be positive")
     if cfg.tail_length < 2:
         raise ConfigError("config.toml: tail_length must be >= 2 to show direction")
 

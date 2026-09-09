@@ -163,9 +163,18 @@ def absolute_scale(frame: pd.DataFrame, cfg: Config, warmup: int = 0) -> float:
 
     Warmup bars are excluded because EMA seeding inflates early dispersion and
     would inflate the divisor for every subsequent chart.
+
+    `scale_percentile` picks whose sigma. At 100 a single volatile member sets
+    the divisor for everyone and compresses the rest into the centre; a lower
+    percentile sizes the chart for a typical member and lets the outlier run
+    off-scale, where the chart marks it rather than shrinking everything to
+    accommodate it.
     """
     usable = frame.iloc[warmup:] if warmup else frame
-    spread = usable.std(ddof=0).max()
+    per_member = usable.std(ddof=0).dropna()
+    if per_member.empty:
+        return 1.0
+    spread = float(np.percentile(per_member.to_numpy(), cfg.scale_percentile))
     if not np.isfinite(spread) or spread <= 0:
         return 1.0
     return float(cfg.sigma_multiple * spread)

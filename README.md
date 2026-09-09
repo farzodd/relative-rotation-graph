@@ -47,7 +47,9 @@ uv run rrg --diagnostics        # stability statistics for one run
 uv run rrg --explain XLK        # every intermediate value, for hand-checking
 uv run rrg --no-chart           # summary table only
 uv run rrg --no-cache           # ignore cached prices and refetch
-uv run pytest                   # 69 tests
+uv run rrg --report             # build the weekly report, write an HTML preview
+uv run rrg --report --send      # ...and deliver it
+uv run pytest                   # 90 tests
 ```
 
 Daily closes are cached under `.cache/` for 20 hours, so repeated runs during
@@ -194,8 +196,8 @@ change both together.
 | sigma_multiple / scale_percentile | 2.0 / 75 |
 | frame_limit | 1.25 |
 | Data source | yfinance by default (no key); Tiingo via `provider = "tiingo"` |
-| Report format | Not yet implemented |
-| Cadence | Not yet implemented |
+| Report profiles | `abs_balanced`, `abs_fast` |
+| Cadence | Not yet implemented (scheduling) |
 
 The benchmark may not appear in the universe. Its RS against itself is a constant
 100, which would drag the cross-sectional mean and distort every other symbol.
@@ -261,15 +263,55 @@ At the settings above that is 132 weekly bars, ~2.5 years, which is why
   is dropped for everyone, so cross-sectional scoring always compares a complete
   peer group.
 
+## The report
+
+`--report` renders one section per profile in `[report] profiles`, each
+reviewable on its own: chart, what moved since the last report, and a table of
+every member's coordinates and quadrant. The two views disagree about which
+quadrant a member is in — that is why both are run — so merging them into one
+table would hide the disagreements worth looking at.
+
+An HTML preview is written to `output/` on every run. Nothing is sent without
+`--send`.
+
+### What changed since last week
+
+Each delivered report records the quadrant it reported per member, under
+`state_dir`. The next report diffs against that file.
+
+State advances **only on a delivered report**, not on a preview. Rendering a
+dozen previews does not consume the comparison, so the next real send still
+reports everything that moved since the last one you actually received. A first
+run says "no previous report to compare against", which is not the same as "no
+changes" and is not reported as such.
+
+### Delivery
+
+SendGrid's v3 API over HTTPS. The key is read from `SENDGRID_API_KEY` and is
+never a config field, because `config.toml` is committed.
+
+`--report` always prints a preflight: sender, recipients, subject, attachments,
+unsubscribe status, and anything blocking. It performs no network calls, so
+misconfiguration surfaces before a send rather than after one.
+
+Each recipient gets their own SendGrid personalization. A single personalization
+with several `to` entries would show every recipient the entire list.
+
+**Before mailing anyone but yourself**, set `unsubscribe_group_id` to a SendGrid
+suppression group. Preflight refuses to send to a third party without one. Bulk
+email in the US must also carry a valid physical postal address and honour
+opt-outs promptly; SendGrid's unsubscribe group handles the opt-out mechanics but
+not the address, which belongs in the footer before you add anyone.
+
 ## Roadmap
 
 - [x] Data retrieval and validation for a single symbol
 - [x] RS-Ratio and RS-Momentum for a single symbol, hand-checkable
 - [x] Extend to full universe
 - [x] Chart rendering with tails
-- [ ] Report layout and summary table
+- [x] Report layout and summary table
+- [x] Email delivery
 - [ ] Scheduling
-- [ ] Email delivery
 
 ## Caveats
 

@@ -11,7 +11,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-NORMALIZATIONS = ("cross_sectional", "time_series", "absolute")
+NORMALIZATIONS = ("cross_sectional", "absolute")
 PROVIDERS = ("tiingo", "yfinance")
 
 
@@ -36,7 +36,6 @@ class Config:
     ema_long: int
     ema_momentum: int
     normalization: str
-    zscore_window: int
     sigma_multiple: float
     scale_percentile: float
 
@@ -70,14 +69,10 @@ class Config:
         in sequence here (EMA_long on RS, then EMA_momentum on RS_Ratio), so
         their warmups add. The tail then needs its own bars on top.
 
-        Time-series normalization additionally consumes a full z-score window.
-        Cross-sectional does not, because it scores across the universe on each
-        date; absolute does not, because it divides by a constant.
+        Neither scaling adds to it: cross-sectional scores across the universe
+        on each date, and absolute divides by a constant.
         """
-        warmup = 3 * self.ema_long + 3 * self.ema_momentum
-        if self.normalization == "time_series":
-            warmup += self.zscore_window
-        return warmup + self.tail_length
+        return 3 * self.ema_long + 3 * self.ema_momentum + self.tail_length
 
     def stamp(self) -> str:
         """One-line provenance string for the chart footer."""
@@ -171,7 +166,6 @@ def load_config(
         ema_long=int(_require(method, "ema_long", "method")),
         ema_momentum=int(_require(method, "ema_momentum", "method")),
         normalization=_require(method, "normalization", "method"),
-        zscore_window=int(method.get("zscore_window", 60)),
         sigma_multiple=float(method.get("sigma_multiple", 2.0)),
         scale_percentile=float(method.get("scale_percentile", 75.0)),
         tail_length=int(chart.get("tail_length", 12)),

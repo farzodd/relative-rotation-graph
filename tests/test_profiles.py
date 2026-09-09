@@ -174,4 +174,3 @@ def test_diagnostics_report_the_settings_they_describe():
     assert diag.tail == 8
     assert 0.0 <= diag.reversal_rate <= 1.0
     assert diag.median_dwell_weeks > 0
-    assert set(diag.forward_return.index) == {"Leading", "Weakening", "Lagging", "Improving"}

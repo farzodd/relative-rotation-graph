@@ -85,10 +85,3 @@ def test_unknown_normalization_is_rejected(tmp_path):
         load_config(write(tmp_path, body))
 
 
-def test_cross_sectional_warmup_excludes_zscore_window(tmp_path):
-    """Cross-sectional scores across the universe, so it needs no z-score history."""
-    cross = load_config(write(tmp_path, VALID))
-    series = load_config(write(tmp_path, VALID.replace(
-        'normalization = "cross_sectional"', 'normalization = "time_series"'
-    ) + "\nzscore_window = 60\n"))
-    assert series.warmup_bars() > cross.warmup_bars()

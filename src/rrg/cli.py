@@ -101,8 +101,6 @@ def main(argv: list[str] | None = None) -> int:
         for key, value in diag.as_row().items():
             if key != "profile":
                 print(f"  {key:20} {value}")
-        print(f"\n{diag.forward_return.round(2).to_string()}")
-        print(_FORWARD_CAVEAT)
 
     if not args.no_chart:
         path = render(result, args.output)
@@ -111,10 +109,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-_FORWARD_CAVEAT = (
-    "\n  Forward returns are descriptive: one 5y window, one universe, no costs\n"
-    "  or option mechanics. They describe what happened, not an edge."
-)
 
 
 def _run_all_profiles(args) -> int:
@@ -128,7 +122,7 @@ def _run_all_profiles(args) -> int:
         print("error: no [profiles.*] declared in config.toml", file=sys.stderr)
         return 1
 
-    rows, forwards, charts = [], {}, []
+    rows, charts = [], []
     for name in names:
         try:
             cfg = load_config(args.config, profile=name, benchmark=args.benchmark)
@@ -140,7 +134,6 @@ def _run_all_profiles(args) -> int:
 
         diag = compute_diagnostics(result)
         rows.append(diag.as_row())
-        forwards[name] = diag.forward_return
         if not args.no_chart:
             charts.append(render(result))
 
@@ -151,9 +144,6 @@ def _run_all_profiles(args) -> int:
 
     print("\n\nProfile comparison")
     print(pd.DataFrame(rows).set_index("profile").to_string())
-    print("\nMedian forward 4-week relative return by quadrant entered (%)")
-    print(pd.DataFrame(forwards).round(2).to_string())
-    print(_FORWARD_CAVEAT)
 
     if charts:
         print("\nCharts:")

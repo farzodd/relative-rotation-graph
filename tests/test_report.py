@@ -27,6 +27,17 @@ def result_and_cfg(tmp_path, **overrides):
     return cfg, compute(make_panel(), cfg)
 
 
+def settings(**overrides) -> mailer.EmailSettings:
+    """Delivery settings come from the environment, so tests construct them
+    directly rather than through Config."""
+    base = dict(
+        api_key="sg.test", from_address="me@example.com", from_name="RRG Report",
+        to_addresses=("me@example.com",), unsubscribe_group_id=0,
+    )
+    base.update(overrides)
+    return mailer.EmailSettings(**base)
+
+
 def section(tmp_path, cfg, result, moves=None, previous=None, name="abs_balanced"):
     chart = tmp_path / f"{name}.png"
     chart.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
@@ -161,25 +172,51 @@ def test_preview_maps_each_chart_to_its_own_section(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_preflight_blocks_when_nothing_is_configured(tmp_path, monkeypatch):
-    monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
-    cfg, _ = result_and_cfg(tmp_path)
-    check = mailer.preflight(cfg, "subject", [])
+def test_preflight_blocks_when_nothing_is_configured(monkeypatch):
+    for var in (mailer.ENV_KEY, mailer.ENV_FROM, mailer.ENV_TO, mailer.ENV_GROUP):
+        monkeypatch.delenv(var, raising=False)
+
+    check = mailer.preflight(mailer.EmailSettings.from_env(), "subject", [])
     assert not check.ok
     joined = " ".join(check.problems)
-    assert "SENDGRID_API_KEY" in joined
-    assert "from_address" in joined
-    assert "to is empty" in joined
+    # Every problem must name the variable to set, since there is no config
+    # field to point the reader at.
+    assert mailer.ENV_KEY in joined
+    assert mailer.ENV_FROM in joined
+    assert mailer.ENV_TO in joined
+
+
+def test_settings_come_only_from_the_environment(monkeypatch):
+    """No file fallback: a fallback is how an address reaches version control."""
+    monkeypatch.setenv(mailer.ENV_FROM, "  me@example.com  ")
+    monkeypatch.setenv(mailer.ENV_TO, " a@x.com , b@y.com ; c@z.com ")
+    monkeypatch.setenv(mailer.ENV_GROUP, "42")
+    mail = mailer.EmailSettings.from_env()
+    assert mail.from_address == "me@example.com"
+    assert mail.to_addresses == ("a@x.com", "b@y.com", "c@z.com")
+    assert mail.unsubscribe_group_id == 42
+
+
+def test_non_numeric_unsubscribe_group_does_not_crash(monkeypatch):
+    """A typo must degrade to 'no group', which preflight then blocks on, rather
+    than raising during config load."""
+    monkeypatch.setenv(mailer.ENV_GROUP, "not-a-number")
+    assert mailer.EmailSettings.from_env().unsubscribe_group_id == 0
+
+
+def test_config_carries_no_address_fields():
+    """There must be no config field for an address to land in."""
+    from rrg.config import Config
+
+    fields = set(Config.__dataclass_fields__)
+    assert not fields & {"from_address", "to_addresses", "from_name", "unsubscribe_group_id"}
 
 
 def test_preflight_passes_when_configured_for_self(tmp_path, monkeypatch):
     monkeypatch.setenv("SENDGRID_API_KEY", "sg.test")
     chart = tmp_path / "c.png"
     chart.write_bytes(b"png")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com", to_addresses=("me@example.com",)
-    )
-    assert mailer.preflight(cfg, "s", [chart]).ok
+    assert mailer.preflight(settings(), "s", [chart]).ok
 
 
 def test_preflight_requires_unsubscribe_before_mailing_other_people(tmp_path, monkeypatch):
@@ -187,28 +224,20 @@ def test_preflight_requires_unsubscribe_before_mailing_other_people(tmp_path, mo
     monkeypatch.setenv("SENDGRID_API_KEY", "sg.test")
     chart = tmp_path / "c.png"
     chart.write_bytes(b"png")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com",
-        to_addresses=("me@example.com", "someone@else.com"),
-    )
-    check = mailer.preflight(cfg, "s", [chart])
+    two = settings(to_addresses=("me@example.com", "someone@else.com"))
+    check = mailer.preflight(two, "s", [chart])
     assert not check.ok
     assert any("unsubscribe" in p for p in check.problems)
 
-    with_group, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com",
-        to_addresses=("me@example.com", "someone@else.com"),
-        unsubscribe_group_id=42,
+    with_group = settings(
+        to_addresses=("me@example.com", "someone@else.com"), unsubscribe_group_id=42
     )
     assert mailer.preflight(with_group, "s", [chart]).ok
 
 
 def test_missing_chart_file_blocks_the_send(tmp_path, monkeypatch):
     monkeypatch.setenv("SENDGRID_API_KEY", "sg.test")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com", to_addresses=("me@example.com",)
-    )
-    check = mailer.preflight(cfg, "s", [tmp_path / "absent.png"])
+    check = mailer.preflight(settings(), "s", [tmp_path / "absent.png"])
     assert not check.ok and any("chart missing" in p for p in check.problems)
 
 
@@ -217,11 +246,10 @@ def test_each_recipient_gets_their_own_personalization(tmp_path):
     the whole list."""
     chart = tmp_path / "c.png"
     chart.write_bytes(b"png")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com",
-        to_addresses=("a@example.com", "b@example.com"), unsubscribe_group_id=7,
+    two = settings(
+        to_addresses=("a@example.com", "b@example.com"), unsubscribe_group_id=7
     )
-    payload = mailer._payload(cfg, "s", "<p>h</p>", "t", [chart])
+    payload = mailer._payload(two, "s", "<p>h</p>", "t", [chart])
     assert len(payload["personalizations"]) == 2
     for entry in payload["personalizations"]:
         assert len(entry["to"]) == 1
@@ -231,10 +259,7 @@ def test_each_recipient_gets_their_own_personalization(tmp_path):
 def test_payload_attaches_charts_inline_with_matching_ids(tmp_path):
     chart = tmp_path / "c.png"
     chart.write_bytes(b"pngdata")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com", to_addresses=("me@example.com",)
-    )
-    payload = mailer._payload(cfg, "s", "<img src='cid:chart0'>", "t", [chart])
+    payload = mailer._payload(settings(), "s", "<img src='cid:chart0'>", "t", [chart])
     attachment = payload["attachments"][0]
     assert attachment["content_id"] == "chart0"
     assert attachment["disposition"] == "inline"
@@ -244,10 +269,7 @@ def test_payload_attaches_charts_inline_with_matching_ids(tmp_path):
 def test_payload_omits_asm_when_no_group_configured(tmp_path):
     chart = tmp_path / "c.png"
     chart.write_bytes(b"png")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com", to_addresses=("me@example.com",)
-    )
-    assert "asm" not in mailer._payload(cfg, "s", "h", "t", [chart])
+    assert "asm" not in mailer._payload(settings(), "s", "h", "t", [chart])
 
 
 def test_send_refuses_before_touching_the_network(tmp_path, monkeypatch):
@@ -256,17 +278,15 @@ def test_send_refuses_before_touching_the_network(tmp_path, monkeypatch):
         mailer.requests, "post",
         lambda *a, **k: pytest.fail("send attempted despite failing preflight"),
     )
-    cfg, _ = result_and_cfg(tmp_path)
     with pytest.raises(mailer.MailError, match="cannot send"):
-        mailer.send_report(cfg, "s", "h", "t", [])
+        mailer.send_report(mailer.EmailSettings.from_env(), "s", "h", "t", [])
 
 
 def test_api_key_is_never_written_into_the_payload(tmp_path, monkeypatch):
     monkeypatch.setenv("SENDGRID_API_KEY", "sg.supersecret")
     chart = tmp_path / "c.png"
     chart.write_bytes(b"png")
-    cfg, _ = result_and_cfg(
-        tmp_path, from_address="me@example.com", to_addresses=("me@example.com",)
+    payload = json.dumps(
+        mailer._payload(settings(api_key="sg.supersecret"), "s", "h", "t", [chart])
     )
-    payload = json.dumps(mailer._payload(cfg, "s", "h", "t", [chart]))
     assert "supersecret" not in payload

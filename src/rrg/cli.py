@@ -220,7 +220,8 @@ def _run_report(args) -> int:
             print(f"    {symbol}: {old} -> {new}")
     print(f"\nPreview: {preview}")
 
-    check = mailer.preflight(base, subject, charts)
+    mail = mailer.EmailSettings.from_env()
+    check = mailer.preflight(mail, subject, charts)
     print("\nDelivery:")
     print(check.render())
 
@@ -229,7 +230,7 @@ def _run_report(args) -> int:
         return 0
 
     try:
-        message_id = mailer.send_report(base, subject, html, text, charts)
+        message_id = mailer.send_report(mail, subject, html, text, charts)
     except mailer.MailError as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
         return 1

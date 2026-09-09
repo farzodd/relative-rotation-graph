@@ -10,3 +10,4 @@ output/
 .claude/memory/
 .claude/settings.local.json
 .state/
+.env

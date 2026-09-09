@@ -50,10 +50,6 @@ class Config:
     report_profiles: tuple[str, ...] = ()
     report_subject: str = "RRG report — {as_of}"
     state_dir: Path | None = None
-    from_address: str = ""
-    from_name: str = "RRG Report"
-    to_addresses: tuple[str, ...] = ()
-    unsubscribe_group_id: int = 0
     profile: str = ""
     profile_description: str = ""
 
@@ -185,10 +181,6 @@ def load_config(
         report_profiles=tuple(raw.get('report', {}).get('profiles', [])),
         report_subject=raw.get('report', {}).get('subject', 'RRG report — {as_of}'),
         state_dir=root / raw.get('report', {}).get('state_dir', '.state'),
-        from_address=raw.get('email', {}).get('from_address', ''),
-        from_name=raw.get('email', {}).get('from_name', 'RRG Report'),
-        to_addresses=tuple(raw.get('email', {}).get('to', [])),
-        unsubscribe_group_id=int(raw.get('email', {}).get('unsubscribe_group_id', 0)),
         profile=profile or "",
         profile_description=profile_description,
     )

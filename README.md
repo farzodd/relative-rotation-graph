@@ -49,7 +49,7 @@ uv run rrg --no-chart           # summary table only
 uv run rrg --no-cache           # ignore cached prices and refetch
 uv run rrg --report             # build the weekly report, write an HTML preview
 uv run rrg --report --send      # ...and deliver it
-uv run pytest                   # 90 tests
+uv run pytest                   # 93 tests
 ```
 
 Daily closes are cached under `.cache/` for 20 hours, so repeated runs during
@@ -197,6 +197,7 @@ change both together.
 | frame_limit | 1.25 |
 | Data source | yfinance by default (no key); Tiingo via `provider = "tiingo"` |
 | Report profiles | `abs_balanced`, `abs_fast` |
+| Sender / recipients | Environment only — never in this file |
 | Cadence | Not yet implemented (scheduling) |
 
 The benchmark may not appear in the universe. Its RS against itself is a constant
@@ -287,8 +288,31 @@ changes" and is not reported as such.
 
 ### Delivery
 
-SendGrid's v3 API over HTTPS. The key is read from `SENDGRID_API_KEY` and is
-never a config field, because `config.toml` is committed.
+SendGrid's v3 API over HTTPS. **Every delivery setting comes from the
+environment.** None is a config field, because `config.toml` is committed to a
+public repository and an address belongs to a person, not to a repo. There is no
+file-based fallback — a fallback is how an address ends up in version control.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `SENDGRID_API_KEY` | yes | API key with Mail Send permission |
+| `RRG_MAIL_FROM` | yes | Sender; must be a verified Single Sender or on an authenticated domain |
+| `RRG_MAIL_TO` | yes | Recipients, comma or semicolon separated |
+| `RRG_MAIL_FROM_NAME` | no | Display name, defaults to "RRG Report" |
+| `RRG_MAIL_UNSUBSCRIBE_GROUP` | see below | SendGrid suppression group id |
+
+```bash
+export SENDGRID_API_KEY=...
+export RRG_MAIL_FROM=you@yourdomain.com
+export RRG_MAIL_TO=someone@example.com,another@example.com
+uv run rrg --report          # check preflight
+uv run rrg --report --send   # deliver
+```
+
+Exported variables live only in the shell that set them. A scheduled run gets a
+different environment, so the variables have to be provided there too — via the
+scheduler's own environment mechanism, or a gitignored file that the schedule
+sources. `.env` is already in `.gitignore` for that purpose.
 
 `--report` always prints a preflight: sender, recipients, subject, attachments,
 unsubscribe status, and anything blocking. It performs no network calls, so

@@ -31,30 +31,67 @@ Computed in this order, on adjusted closes:
 
 ```
 1. RS           = 100 * (price_security / price_benchmark)
-2. raw_ratio    = 100 * ((EMA_short(RS) - EMA_long(RS)) / EMA_long(RS) + 1)
-3. RS_Ratio     = 100 + zscore(raw_ratio, window)
+2. raw_ratio    = 100 * ((EMA_short(RS) - EMA_long(RS)) / EMA_long(RS) + 1)   [ema_spread]
+              or 100 * EMA_short(RS) / EMA_short(RS).shift(ratio_window)      [rolling_return]
+3. RS_Ratio     = 100 + scale(raw_ratio)
 4. raw_mom      = 100 * (RS_Ratio / EMA_mom(RS_Ratio))
-5. RS_Momentum  = 100 + zscore(raw_mom, window)
+5. RS_Momentum  = 100 + scale(raw_mom)
 ```
+
+Step 2 has two forms, selected by `ratio_basis`; step 3 and 5 have three, selected
+by `normalization`. Both choices are described below and stamped on every chart.
 
 ### What RS-Ratio actually measures
 
-Worth being precise about, because the intuitive reading of the x-axis is wrong.
+An earlier version of this section claimed a steadily-outperforming security
+"scores near the middle of the x-axis". **That was wrong**, and it is worth
+stating plainly because it is the kind of error that makes a reader distrust a
+chart that is behaving correctly.
 
-Step 2 is an EMA *spread*. It asks whether RS is above its own slower average —
-that is, whether relative strength is currently rising — not how far ahead the
-security has got. A security that has quietly beaten the benchmark for two years
-at a steady rate scores near the middle of the x-axis, because its EMA spread is
-small and constant. A security flat for two years that broke out last month
-scores high.
+Four constructed cases, five years of weekly bars, measured under
+`ratio_basis = "ema_spread"` (`tests/test_ratio_basis.py`):
 
-So both axes are derivatives of RS: RS-Ratio tracks its trend, RS-Momentum the
-change in that trend. The x-axis is not cumulative outperformance, and reading it
-that way will mislead you. `test_rs_ratio_measures_trend_in_rs_not_cumulative_outperformance`
-pins this down with a case where the two orderings are opposite.
+| | cumulative vs benchmark | last 13 weeks | x-axis |
+|---|---|---|---|
+| STEADY — beats benchmark 0.25%/wk, always | +171% | +3.30% | **+2.66** |
+| BREAKOUT — flat, then 1%/wk for a quarter | +12.7% | +12.75% | **+4.24** |
+| FADED — steady for years, flat for 6 months | +155% | 0.00% | **+0.71** |
+| FLAT — tracks the benchmark exactly | 0% | 0.00% | **0.00** |
 
-This is inherent to the public approximation, not a defect. It is one of the
-reasons output will not match StockCharts.
+A consistent outperformer lands clearly right of centre. Only a security that
+has *stopped* outperforming drifts back toward it, and FADED's 13-week relative
+return is exactly 0.00% — so the centre is the honest place for it.
+
+BREAKOUT outranking STEADY is also correct rather than a flaw: over the last
+quarter it gained 12.75% against 3.30%. That ordering holds under any windowed
+measure. Only cumulative-since-inception would reverse it, and that quantity
+answers a different question than a rotation chart is asking.
+
+What *is* true is narrower: the x-axis measures a **rate**, and its effective
+lookback is emergent rather than chosen. At EMA 10/30 it behaves like a 26–52
+week relative return (rank correlation +0.94 and +0.92); at 5/15 it is closer to
+4 weeks and noisier. You cannot ask it for "the last quarter".
+
+### Choosing the lookback explicitly
+
+`ratio_basis = "rolling_return"` replaces the EMA spread with relative
+performance over exactly `ratio_window` bars:
+
+```
+raw_ratio = 100 * EMA_short(RS) / EMA_short(RS).shift(ratio_window)
+```
+
+Right of centre then means "beat the benchmark over that window", with the
+window a number you set rather than a consequence of the EMA spans. The EMA
+smooths both ends so one noisy bar cannot swing the reading.
+
+It does not reorder the cases above — but it does space them differently, giving
+the sustained performer 81% of the breakout's reading against `ema_spread`'s
+63%. Consistency is rewarded more.
+
+`ema_spread` remains the default because it is the published approximation and
+what other RRG implementations use. Choose `rolling_return` when you want the
+timeframe stated rather than inferred.
 
 ### On normalization
 
@@ -242,7 +279,7 @@ uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 70 tests
+uv run pytest                 # 84 tests
 ```
 
 ## Profiles
@@ -259,6 +296,7 @@ tried to change the universe is rejected at load.
 | `absolute` | 10/30/10 | 12 | Measured against the benchmark, not peers |
 | `absolute_fast` | 5/15/5 | 8 | Absolute basis, earliest read |
 | `absolute_asinh` | 10/30/10 | 12 | Absolute on non-linear axes |
+| `absolute_window` | 10/–/10 | 12 | Absolute, x-axis is an explicit 26-week relative return |
 
 ### Choosing between them
 

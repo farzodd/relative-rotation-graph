@@ -61,32 +61,17 @@ ema_short = 10
 ema_long = 30
 ema_momentum = 10
 
-# How step 2 turns RS into the x-axis.
-#
-# "ema_spread"     the published approximation: the gap between a fast and slow
-#                  EMA of RS. Measures the *rate* at which relative strength is
-#                  changing. Its effective lookback is emergent — at 10/30 the
-#                  x-axis behaves like a 26-52 week relative return (rank
-#                  correlation +0.94 / +0.92) — and cannot be set directly.
-# "rolling_return" relative performance over exactly `ratio_window` bars. Right
-#                  of centre means "outperformed the benchmark over that window",
-#                  full stop. The timeframe is a number you choose rather than a
-#                  side effect of the EMA spans.
-#
-# Both place a steady outperformer right of centre; they differ in how the
-# lookback is specified, not in whether consistency is rewarded.
-ratio_basis = "ema_spread"
-
-# Bars of lookback for "rolling_return". 26 weekly bars is roughly six months,
-# which is where the ema_spread default already sits.
-ratio_window = 26
 
 # "cross_sectional" scores each security against its peers on each date.
 # "time_series"    scores each security against its own history.
 # "absolute"       divides by a constant, so position is measured against the
 #                  benchmark rather than against peers.
 # These are not comparable. Do not mix them across runs.
-normalization = "cross_sectional"
+#
+# Default is "absolute": the main view is "how is each member doing against the
+# benchmark", with SPY on the origin. Profiles that want the peer-relative view
+# set normalization explicitly rather than inheriting it.
+normalization = "absolute"
 
 # Only used when normalization = "time_series". Ignored otherwise.
 zscore_window = 60
@@ -145,14 +130,16 @@ dpi = 160
 # which chart looks tidier.
 
 [profiles.fast]
-description = "Quadrant-entry optimised: crosses early, at the cost of more false crossings."
+description = "Peer-relative, quadrant-entry optimised: crosses early, more false crossings."
+normalization = "cross_sectional"
 ema_short = 5
 ema_long = 15
 ema_momentum = 5
 tail_length = 8
 
 [profiles.balanced]
-description = "Middle ground. The original settings this project was specified with."
+description = "Peer-relative at moderate speed. The settings this project was specified with."
+normalization = "cross_sectional"
 ema_short = 10
 ema_long = 30
 ema_momentum = 10
@@ -192,14 +179,3 @@ ema_long = 15
 ema_momentum = 5
 tail_length = 8
 
-# The absolute view with an explicitly chosen lookback: right of centre means
-# "beat the benchmark over the last 26 weeks", rather than a rate whose window
-# has to be inferred from the EMA spans.
-[profiles.absolute_window]
-description = "Absolute basis, x-axis is relative return over an explicit 26-week window."
-normalization = "absolute"
-ratio_basis = "rolling_return"
-ratio_window = 26
-ema_short = 10
-ema_momentum = 10
-tail_length = 12

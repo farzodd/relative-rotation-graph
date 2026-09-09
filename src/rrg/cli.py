@@ -12,6 +12,7 @@ from .chart import render
 from .config import ConfigError, load_config, profile_names
 from .data import DataError, build_price_panel
 from .diagnostics import compute_diagnostics
+from . import mailer, report
 from .rrg import compute
 
 
@@ -49,6 +50,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-cache", action="store_true", help="ignore cached prices and refetch"
     )
     parser.add_argument("--no-chart", action="store_true", help="compute and print, skip the PNG")
+    parser.add_argument(
+        "--report", action="store_true",
+        help="build the weekly report and write an HTML preview (does not send)",
+    )
+    parser.add_argument(
+        "--send", action="store_true",
+        help="with --report, actually deliver it. Without this nothing is sent.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     return parser
 
@@ -59,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s: %(message)s",
     )
+
+    if args.report or args.send:
+        return _run_report(args)
 
     if args.all_profiles:
         return _run_all_profiles(args)
@@ -154,3 +166,78 @@ def _run_all_profiles(args) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def _run_report(args) -> int:
+    """Build the report; send only when explicitly asked."""
+    try:
+        base = load_config(args.config, benchmark=args.benchmark)
+    except (ConfigError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if not base.report_profiles:
+        print("error: [report] profiles is empty in config.toml", file=sys.stderr)
+        return 1
+
+    sections, charts = [], []
+    for name in base.report_profiles:
+        try:
+            cfg = load_config(args.config, profile=name, benchmark=args.benchmark)
+            panel = build_price_panel(cfg, use_cache=not args.no_cache)
+            result = compute(panel, cfg)
+        except (ConfigError, DataError, ValueError) as exc:
+            print(f"error in report profile {name!r}: {exc}", file=sys.stderr)
+            return 1
+
+        chart_path = render(result)
+        moves, previous_as_of = report.diff_quadrants(report.load_state(cfg, name), result)
+        sections.append(
+            report.SectionData(
+                profile=name,
+                description=cfg.profile_description,
+                result=result,
+                chart_path=chart_path,
+                moves=moves,
+                previous_as_of=previous_as_of,
+            )
+        )
+        charts.append(chart_path)
+
+    as_of = str(sections[0].result.as_of.date())
+    subject = base.report_subject.format(as_of=as_of)
+    html = report.build_html(base, sections, as_of)
+    text = report.build_text(base, sections, as_of)
+    preview = report.write_preview(base, html, sections, as_of)
+
+    for section in sections:
+        label = (
+            "first delivery" if section.previous_as_of is None
+            else f"{len(section.moves)} change(s) since {section.previous_as_of}"
+        )
+        print(f"  {section.profile}: {label}")
+        for symbol, old, new in section.moves:
+            print(f"    {symbol}: {old} -> {new}")
+    print(f"\nPreview: {preview}")
+
+    check = mailer.preflight(base, subject, charts)
+    print("\nDelivery:")
+    print(check.render())
+
+    if not args.send:
+        print("\nNothing sent. Re-run with --send to deliver.")
+        return 0
+
+    try:
+        message_id = mailer.send_report(base, subject, html, text, charts)
+    except mailer.MailError as exc:
+        print(f"\nerror: {exc}", file=sys.stderr)
+        return 1
+
+    # State advances only on a delivered report, so dry runs do not consume the
+    # week-over-week comparison.
+    for section in sections:
+        cfg = load_config(args.config, profile=section.profile, benchmark=args.benchmark)
+        report.save_state(cfg, section.profile, section.result)
+    print(f"\nSent. SendGrid message id: {message_id}")
+    return 0

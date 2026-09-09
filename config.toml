@@ -153,3 +153,30 @@ ema_short = 5
 ema_long = 15
 ema_momentum = 5
 tail_length = 8
+
+# --------------------------------------------------------------------------
+# Report
+# --------------------------------------------------------------------------
+
+[report]
+# One section per profile, reviewed independently. Each section gets its own
+# chart, position table, and list of what moved — the two views disagree, and
+# the disagreements are the interesting part.
+profiles = ["abs_balanced", "abs_fast"]
+subject = "Sector RRG — week ending {as_of}"
+output_dir = "output"
+
+# "What changed" is measured against the last report actually delivered, not the
+# last one rendered, so a dry run does not consume the comparison.
+state_dir = ".state"
+
+[email]
+# The API key is read from the SENDGRID_API_KEY environment variable. It is
+# deliberately not a config field: this file is committed.
+from_address = ""
+from_name = "RRG Report"
+to = []
+
+# SendGrid unsubscribe group id. 0 disables it. Set this before sending to
+# anyone other than yourself — see the reporting notes in the README.
+unsubscribe_group_id = 0

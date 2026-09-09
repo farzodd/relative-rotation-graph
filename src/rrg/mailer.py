@@ -1,11 +1,14 @@
 """Send the report through the SendGrid v3 API.
 
-The API key comes from SENDGRID_API_KEY and is never read from config.toml,
-which is committed. Nothing here writes the key to disk or logs it.
+Every delivery setting — key, sender, recipients, unsubscribe group — comes from
+the environment. None of it is a config field, because config.toml is committed
+to a public repository and an address belongs to a person, not to a repo. There
+is deliberately no file-based fallback: a fallback is how an address ends up in
+version control.
 
-Sending is never implicit: `send_report` is only called when the caller has
-explicitly asked for it, and `preflight` reports what would happen without
-touching the network.
+Sending is never implicit: `send_report` runs only when the caller has explicitly
+asked for it, and `preflight` reports what would happen without touching the
+network.
 """
 
 from __future__ import annotations
@@ -17,7 +20,11 @@ from pathlib import Path
 
 import requests
 
-from .config import Config
+ENV_KEY = "SENDGRID_API_KEY"
+ENV_FROM = "RRG_MAIL_FROM"
+ENV_FROM_NAME = "RRG_MAIL_FROM_NAME"
+ENV_TO = "RRG_MAIL_TO"
+ENV_GROUP = "RRG_MAIL_UNSUBSCRIBE_GROUP"
 
 API_URL = "https://api.sendgrid.com/v3/mail/send"
 TIMEOUT = 30
@@ -25,6 +32,33 @@ TIMEOUT = 30
 
 class MailError(RuntimeError):
     """Raised when a report cannot be sent."""
+
+
+@dataclass(frozen=True)
+class EmailSettings:
+    """Delivery settings, read from the environment only."""
+
+    api_key: str
+    from_address: str
+    from_name: str
+    to_addresses: tuple[str, ...]
+    unsubscribe_group_id: int
+
+    @classmethod
+    def from_env(cls) -> "EmailSettings":
+        raw_to = os.environ.get(ENV_TO, "")
+        # Accept comma or semicolon separated, tolerate stray whitespace.
+        recipients = tuple(
+            a.strip() for a in raw_to.replace(";", ",").split(",") if a.strip()
+        )
+        group = os.environ.get(ENV_GROUP, "").strip()
+        return cls(
+            api_key=os.environ.get(ENV_KEY, ""),
+            from_address=os.environ.get(ENV_FROM, "").strip(),
+            from_name=os.environ.get(ENV_FROM_NAME, "RRG Report").strip(),
+            to_addresses=recipients,
+            unsubscribe_group_id=int(group) if group.isdigit() else 0,
+        )
 
 
 @dataclass
@@ -54,55 +88,55 @@ class Preflight:
         return "\n".join(lines)
 
 
-def preflight(cfg: Config, subject: str, charts: list[Path]) -> Preflight:
+def preflight(mail: EmailSettings, subject: str, charts: list[Path]) -> Preflight:
     """Validate a send without performing one."""
     problems: list[str] = []
 
-    if not os.environ.get("SENDGRID_API_KEY"):
+    if not mail.api_key:
         problems.append(
-            "SENDGRID_API_KEY is not set. Create a key with Mail Send permission "
-            "in the SendGrid dashboard, then: export SENDGRID_API_KEY=..."
+            f"{ENV_KEY} is not set. Create a key with Mail Send permission in the "
+            f"SendGrid dashboard, then: export {ENV_KEY}=..."
         )
-    if not cfg.from_address:
+    if not mail.from_address:
         problems.append(
-            "[email] from_address is empty. It must be an address you have "
-            "verified as a Single Sender (or on a domain you authenticated) in "
-            "SendGrid, or the API will reject the send."
+            f"{ENV_FROM} is not set. It must be an address you have verified as a "
+            "Single Sender (or on a domain you authenticated) in SendGrid, or the "
+            "API will reject the send."
         )
-    if not cfg.to_addresses:
-        problems.append("[email] to is empty — nobody to send to.")
+    if not mail.to_addresses:
+        problems.append(f"{ENV_TO} is not set — nobody to send to.")
     for chart in charts:
         if not chart.exists():
             problems.append(f"chart missing: {chart}")
 
     # Mail to anyone but yourself is a different obligation than mail to
     # yourself; surface it here rather than after it has gone out.
-    others = [a for a in cfg.to_addresses if a != cfg.from_address]
-    if others and not cfg.unsubscribe_group_id:
+    others = [a for a in mail.to_addresses if a != mail.from_address]
+    if others and not mail.unsubscribe_group_id:
         problems.append(
             f"sending to {len(others)} address(es) other than your own with no "
-            "unsubscribe group configured. Set [email] unsubscribe_group_id to a "
-            "SendGrid suppression group id first."
+            f"unsubscribe group configured. Set {ENV_GROUP} to a SendGrid "
+            "suppression group id first."
         )
 
     return Preflight(
         ok=not problems,
         problems=problems,
-        recipients=list(cfg.to_addresses),
-        sender=cfg.from_address,
+        recipients=list(mail.to_addresses),
+        sender=mail.from_address,
         subject=subject,
         attachments=[c.name for c in charts],
-        unsubscribe_group=cfg.unsubscribe_group_id,
+        unsubscribe_group=mail.unsubscribe_group_id,
     )
 
 
 def _payload(
-    cfg: Config, subject: str, html: str, text: str, charts: list[Path]
+    mail: EmailSettings, subject: str, html: str, text: str, charts: list[Path]
 ) -> dict:
     # One personalization per recipient: a single personalization with several
     # `to` entries puts every address in the visible header, showing the list to
     # everyone on it.
-    personalizations = [{"to": [{"email": address}]} for address in cfg.to_addresses]
+    personalizations = [{"to": [{"email": address}]} for address in mail.to_addresses]
 
     attachments = []
     for i, chart in enumerate(charts):
@@ -118,7 +152,7 @@ def _payload(
 
     payload: dict = {
         "personalizations": personalizations,
-        "from": {"email": cfg.from_address, "name": cfg.from_name},
+        "from": {"email": mail.from_address, "name": mail.from_name},
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": text},
@@ -126,26 +160,26 @@ def _payload(
         ],
         "attachments": attachments,
     }
-    if cfg.unsubscribe_group_id:
-        payload["asm"] = {"group_id": cfg.unsubscribe_group_id}
+    if mail.unsubscribe_group_id:
+        payload["asm"] = {"group_id": mail.unsubscribe_group_id}
     return payload
 
 
 def send_report(
-    cfg: Config, subject: str, html: str, text: str, charts: list[Path]
+    mail: EmailSettings, subject: str, html: str, text: str, charts: list[Path]
 ) -> str:
     """Send. Raises MailError rather than returning a failure quietly."""
-    check = preflight(cfg, subject, charts)
+    check = preflight(mail, subject, charts)
     if not check.ok:
         raise MailError("cannot send:\n" + "\n".join(f"  - {p}" for p in check.problems))
 
     response = requests.post(
         API_URL,
         headers={
-            "Authorization": f"Bearer {os.environ['SENDGRID_API_KEY']}",
+            "Authorization": f"Bearer {mail.api_key}",
             "Content-Type": "application/json",
         },
-        json=_payload(cfg, subject, html, text, charts),
+        json=_payload(mail, subject, html, text, charts),
         timeout=TIMEOUT,
     )
 
@@ -158,7 +192,7 @@ def send_report(
     if response.status_code in (401, 403):
         raise MailError(
             f"SendGrid rejected the credentials or sender ({response.status_code}). "
-            f"Check the key has Mail Send permission and that {cfg.from_address} is "
+            f"Check the key has Mail Send permission and that {mail.from_address} is "
             f"a verified sender. Response: {detail}"
         )
     raise MailError(f"SendGrid returned {response.status_code}: {detail}")

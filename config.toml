@@ -158,6 +158,10 @@ tail_length = 8
 # Report
 # --------------------------------------------------------------------------
 
+# Recipients, sender, and the unsubscribe group are read from the environment,
+# never from this file — it is committed to a public repository and addresses
+# belong to people. See the reporting section of the README for the variables.
+
 [report]
 # One section per profile, reviewed independently. Each section gets its own
 # chart, position table, and list of what moved — the two views disagree, and
@@ -170,13 +174,3 @@ output_dir = "output"
 # last one rendered, so a dry run does not consume the comparison.
 state_dir = ".state"
 
-[email]
-# The API key is read from the SENDGRID_API_KEY environment variable. It is
-# deliberately not a config field: this file is committed.
-from_address = ""
-from_name = "RRG Report"
-to = []
-
-# SendGrid unsubscribe group id. 0 disables it. Set this before sending to
-# anyone other than yourself — see the reporting notes in the README.
-unsubscribe_group_id = 0

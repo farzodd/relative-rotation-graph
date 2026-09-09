@@ -18,6 +18,15 @@ symbols = [
     "XLU",   # Utilities
     "XLV",   # Health Care
     "XLY",   # Consumer Discretionary
+    # Industry funds, narrower than the sectors above. Both are subsets of a
+    # sector already in the list — ITA of Industrials, SMH of Technology — so
+    # the peer group is no longer a partition. Under cross-sectional scoring a
+    # sector and its own sub-industry are scored against each other, which
+    # double-counts the theme. Absolute mode is unaffected: each is measured
+    # against the benchmark alone.
+    # Alternatives if preferred: XAR (equal-weight aerospace), SOXX (semis).
+    "ITA",   # Aerospace & Defense
+    "SMH",   # Semiconductors
 ]
 
 [universe.labels]
@@ -32,6 +41,8 @@ XLRE = "Real Estate"
 XLU = "Utilities"
 XLV = "Health Care"
 XLY = "Discretionary"
+ITA = "Aerospace & Def"
+SMH = "Semiconductors"
 
 [data]
 # "tiingo" needs TIINGO_API_KEY in the environment. "yfinance" needs no key.
@@ -51,12 +62,25 @@ ema_long = 30
 ema_momentum = 10
 
 # "cross_sectional" scores each security against its peers on each date.
-# "time_series" scores each security against its own history.
+# "time_series"    scores each security against its own history.
+# "absolute"       divides by a constant, so position is measured against the
+#                  benchmark rather than against peers.
 # These are not comparable. Do not mix them across runs.
 normalization = "cross_sectional"
 
 # Only used when normalization = "time_series". Ignored otherwise.
 zscore_window = 60
+
+# Absolute mode only. The axis unit is a `sigma_multiple`-sigma move of whichever
+# member has the widest dispersion, so +-1.0 is the edge of that move and the
+# axes read -1 to +1. Raising it zooms out.
+#
+# Because the divisor is one constant rather than a per-date statistic, the
+# origin stays fixed at the benchmark: every member can sit in Lagging together,
+# which cross-sectional scoring structurally cannot show. The constant is
+# recomputed from the loaded history on each run, so it drifts slowly as data
+# accumulates, and it is stamped on the chart so a change is visible.
+sigma_multiple = 2.0
 
 [chart]
 tail_length = 12
@@ -98,3 +122,15 @@ ema_short = 13
 ema_long = 40
 ema_momentum = 13
 tail_length = 16
+
+# Same speed as `balanced`, different question. The three profiles above ask
+# "which member is rotating where relative to the others"; this one asks "is any
+# of them beating the benchmark at all". Its coordinates are not comparable with
+# the others' — only with its own history.
+[profiles.absolute]
+description = "Measured against the benchmark, not against peers. Everything can lag at once."
+normalization = "absolute"
+ema_short = 10
+ema_long = 30
+ema_momentum = 10
+tail_length = 12

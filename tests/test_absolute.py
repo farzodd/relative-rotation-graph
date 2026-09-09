@@ -137,6 +137,106 @@ def test_palette_covers_the_configured_universe():
     assert len(set(SERIES_COLORS)) == len(SERIES_COLORS), "palette has duplicates"
 
 
+def test_lower_percentile_enlarges_coordinates():
+    """The fix for one outlier compressing everyone.
+
+    At p100 the widest member sets the divisor; a lower percentile sizes the
+    chart for a typical member, so everyone else's coordinates grow.
+    """
+    panel = losers_panel(k=6)
+    wide = compute(panel, make_config(normalization="absolute", scale_percentile=100.0))
+    typical = compute(panel, make_config(normalization="absolute", scale_percentile=50.0))
+    spread_wide = (wide.rs_ratio.iloc[-1] - 100).abs().median()
+    spread_typical = (typical.rs_ratio.iloc[-1] - 100).abs().median()
+    assert spread_typical > spread_wide
+    assert typical.scale_ratio < wide.scale_ratio
+
+
+def test_percentile_100_is_the_max():
+    frame = pd.DataFrame({"A": [100.0, 103.0, 97.0], "B": [100.0, 100.5, 99.5]})
+    cfg = make_config(normalization="absolute", scale_percentile=100.0)
+    assert absolute_scale(frame, cfg) == pytest.approx(2.0 * frame.std(ddof=0).max())
+
+
+def test_absolute_frame_is_fixed_not_data_fitted():
+    """An auto-fitting frame let the widest tail re-compress everyone, and made
+    week-to-week charts incomparable."""
+    from rrg.chart import _limits
+
+    cfg = make_config(normalization="absolute", frame_limit=1.25)
+    calm = compute(losers_panel(k=4), cfg)
+    lo, hi = _limits(calm)
+    assert (lo, hi) == (-1.25, 1.25)
+
+    # Same frame regardless of how far the data actually reaches.
+    wild = compute(losers_panel(k=8), cfg)
+    assert _limits(wild) == (-1.25, 1.25)
+
+
+def test_non_absolute_frame_still_fits_the_data():
+    from rrg.chart import _limits
+
+    result = compute(make_panel(), make_config(normalization="cross_sectional"))
+    lo, hi = _limits(result)
+    assert lo < 100 < hi
+    assert (lo, hi) != (-1.25, 1.25)
+
+
+@pytest.mark.parametrize("axis_scale", ["linear", "asinh"])
+def test_render_succeeds_with_off_scale_members(tmp_path, axis_scale):
+    """A member outside the fixed frame must render, not crash or vanish."""
+    from rrg.chart import render
+
+    cfg = make_config(
+        normalization="absolute", axis_scale=axis_scale,
+        frame_limit=0.2,  # deliberately tight so members fall outside
+        output_dir=tmp_path,
+    )
+    result = compute(losers_panel(k=5), cfg)
+    outside = ((result.rs_ratio.iloc[-1] - 100).abs() > 0.2).any()
+    assert outside, "fixture should put someone off-scale"
+
+    path = render(result, tmp_path / f"off_{axis_scale}.png")
+    assert path.exists() and path.stat().st_size > 5000
+
+
+def test_rejects_bad_axis_scale_and_percentile(tmp_path):
+    import textwrap
+
+    base = """
+    [universe]
+    benchmark = "SPY"
+    symbols = ["XLK", "XLF", "XLE"]
+    [data]
+    provider = "yfinance"
+    interval = "weekly"
+    lookback_years = 5
+    [method]
+    ema_short = 10
+    ema_long = 30
+    ema_momentum = 10
+    normalization = "absolute"
+    {extra}
+    [chart]
+    tail_length = 12
+    {chart_extra}
+    """
+
+    def write(extra="", chart_extra=""):
+        path = tmp_path / "c.toml"
+        path.write_text(textwrap.dedent(base).format(extra=extra, chart_extra=chart_extra))
+        return path
+
+    with pytest.raises(ConfigError, match="axis_scale"):
+        load_config(write(chart_extra='axis_scale = "log"'))
+    with pytest.raises(ConfigError, match="scale_percentile"):
+        load_config(write(extra="scale_percentile = 0"))
+    with pytest.raises(ConfigError, match="scale_percentile"):
+        load_config(write(extra="scale_percentile = 140"))
+    with pytest.raises(ConfigError, match="frame_limit"):
+        load_config(write(chart_extra="frame_limit = -1"))
+
+
 def test_config_accepts_absolute_and_reports_it(tmp_path):
     body = """
     [universe]

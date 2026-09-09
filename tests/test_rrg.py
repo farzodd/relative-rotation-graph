@@ -33,11 +33,15 @@ def make_config(**overrides) -> Config:
         normalization="cross_sectional",
         zscore_window=60,
         sigma_multiple=2.0,
+        scale_percentile=100.0,
         tail_length=5,
         output_dir=None,
         figure_width=11.0,
         figure_height=9.0,
         dpi=160,
+        frame_limit=1.25,
+        axis_scale="linear",
+        asinh_linear_width=0.35,
     )
     base.update(overrides)
     return Config(**base)

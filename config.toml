@@ -82,9 +82,31 @@ zscore_window = 60
 # accumulates, and it is stamped on the chart so a change is visible.
 sigma_multiple = 2.0
 
+# Whose sigma sets the unit. 100 = the widest member, which lets a single
+# volatile outlier (SMH is 2.31x the median member) set the divisor and squeeze
+# everyone else into the centre. A lower percentile sizes the chart for a
+# typical member and lets outliers run off-scale, where they are marked.
+scale_percentile = 75.0
+
 [chart]
 tail_length = 12
 output_dir = "output"
+
+# Absolute mode only. A fixed frame rather than one that expands to whatever the
+# widest tail reaches — otherwise a single outlier re-compresses everyone, and
+# week-to-week charts stop being comparable. Members outside it are drawn at the
+# boundary as hollow triangles with their true coordinate in the label.
+frame_limit = 1.25
+
+# "linear" keeps distance proportional to movement, so tail length and rotation
+# angle mean what they look like.
+# "asinh" is linear near the origin and logarithmic further out: it un-compresses
+# the clustered middle while still fitting large moves on screen. The cost is
+# that distances and angles are no longer proportional — a straight move renders
+# curved, and tail lengths are not comparable between the middle and the edge.
+axis_scale = "linear"
+# Width of the asinh transform's linear region, in axis units.
+asinh_linear_width = 0.35
 figure_width = 11.0
 figure_height = 9.0
 dpi = 160
@@ -130,6 +152,18 @@ tail_length = 16
 [profiles.absolute]
 description = "Measured against the benchmark, not against peers. Everything can lag at once."
 normalization = "absolute"
+ema_short = 10
+ema_long = 30
+ema_momentum = 10
+tail_length = 12
+
+# Same numbers as `absolute`, drawn on a non-linear axis: linear near the origin,
+# logarithmic further out. Un-compresses the cluster near the benchmark at the
+# cost of proportionality — distances and rotation angles are no longer to scale.
+[profiles.absolute_asinh]
+description = "Absolute, asinh axes: expands the centre, distorts distances."
+normalization = "absolute"
+axis_scale = "asinh"
 ema_short = 10
 ema_long = 30
 ema_momentum = 10

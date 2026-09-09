@@ -102,10 +102,39 @@ One constant for the whole universe and the whole history. Consequences:
   drawn on the chart. The un-normalized quantity correlates **+0.60** with true
   breadth, against −0.10 for the cross-sectional version.
 - **Every member may lag at once**, which is the point.
-- **`1.0` on an axis is a `sigma_multiple`-sigma move** of the widest member, so
-  the axes read −1 to +1 and the frame is held at ±1 even on a quiet week.
+- **`1.0` on an axis is a `sigma_multiple`-sigma move** of the `scale_percentile`
+  member, so the axes read −1 to +1.
 - Each axis gets its own constant; the two quantities have unrelated natural
   spreads and sharing a divisor would flatten one into a line.
+
+### Keeping one outlier from eating the chart
+
+Two separate mechanisms let a single volatile member compress everyone else, and
+both had to be fixed:
+
+- **The divisor.** At `scale_percentile = 100` the widest member sets it. SMH's
+  sigma is 2.31x the median member's, so everyone else was squeezed toward the
+  centre. `scale_percentile = 75` sizes the chart for a typical member instead.
+- **The frame.** Auto-expanding to the widest tail undid any divisor change.
+  Measured: the median member occupied 26.0% of the half-frame at
+  `sigma_multiple = 2.0`, 26.1% at 1.0, and 26.5% at 0.5 — *changing
+  `sigma_multiple` alone is a no-op*, altering only the tick labels. The frame
+  is now fixed at `frame_limit`, which also makes week-to-week charts
+  comparable. Members outside it are drawn on the boundary as hollow triangles
+  captioned with their true coordinate, never dropped.
+
+### Non-linear axes
+
+`axis_scale = "asinh"` is linear near the origin and logarithmic further out,
+expanding the cluster near the benchmark while still fitting large moves. asinh
+rather than log because it is defined through zero, which the coordinates
+require.
+
+The cost is proportionality: distances and rotation angles are no longer to
+scale, so a straight move renders curved and tail lengths are not comparable
+between the middle and the edge. Since an RRG is read through tail direction and
+speed, `linear` remains the default — percentile scaling and the fixed frame
+already recover most of the legibility without distorting the geometry.
 
 The divisor is recomputed from the loaded history on each run, so it drifts
 slowly as data accumulates, and it is stamped on the chart footer. A *rolling*
@@ -189,7 +218,7 @@ uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 60 tests
+uv run pytest                 # 67 tests
 ```
 
 ## Profiles

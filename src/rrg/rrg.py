@@ -198,11 +198,22 @@ def compute(panel: PricePanel, cfg: Config) -> RRGResult:
     # 1. Relative strength against the benchmark.
     rs = prices.div(benchmark, axis=0) * 100.0
 
-    # 2. Normalised spread between a fast and slow EMA of RS. The `+ 1` recentres
-    #    the ratio on 1.0 before scaling, so raw_ratio oscillates around 100.
-    ema_short = _ema(rs, cfg.ema_short)
-    ema_long = _ema(rs, cfg.ema_long)
-    raw_ratio = 100.0 * ((ema_short - ema_long) / ema_long + 1.0)
+    # 2. Turn RS into the x-axis quantity. Both bases centre on 100 and place a
+    #    steady outperformer to the right; they differ in how the lookback is
+    #    specified.
+    if cfg.ratio_basis == "rolling_return":
+        # Relative performance over an explicit window: 105 means "beat the
+        # benchmark by 5% over ratio_window bars". The EMA smooths both ends of
+        # the comparison so a single noisy bar cannot swing the reading.
+        smoothed = _ema(rs, cfg.ema_short)
+        raw_ratio = 100.0 * (smoothed / smoothed.shift(cfg.ratio_window))
+    else:
+        # The published approximation: gap between a fast and slow EMA of RS,
+        # measuring the rate of change of relative strength. The `+ 1` recentres
+        # the ratio on 1.0 before scaling, so raw_ratio oscillates around 100.
+        ema_short = _ema(rs, cfg.ema_short)
+        ema_long = _ema(rs, cfg.ema_long)
+        raw_ratio = 100.0 * ((ema_short - ema_long) / ema_long + 1.0)
 
     # Points still inside the warmup are not trustworthy and are not plotted.
     warmup = cfg.warmup_bars() - cfg.tail_length

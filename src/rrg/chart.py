@@ -66,8 +66,9 @@ def _limits(result: RRGResult) -> tuple[float, float]:
 def render(result: RRGResult, path: str | Path | None = None) -> Path:
     cfg = result.config
     lo, hi = _limits(result)
-    # Absolute mode plots deviations centred on 0; asinh must transform
-    # around the origin, and asinh(100) is effectively linear.
+    # Absolute mode plots deviations centred on 0 rather than 100: the reader
+    # wants the distance from the benchmark, and it keeps the tick formatter
+    # from having to subtract an offset on every label.
     c = 0.0 if cfg.is_absolute else 100.0
     shift = c - 100.0
     def co(v):
@@ -170,18 +171,6 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
     if cfg.is_absolute:
         # Coordinates are stored centred on 100 so quadrant logic stays shared,
         # but the reader wants the deviation, which is the meaningful quantity.
-        # Scale first: set_xscale installs its own locator and formatter, so
-        # setting ours before it would be silently overwritten — which is how
-        # the asinh axes ended up labelled in scientific notation.
-        if cfg.axis_scale == "asinh":
-            ax.set_xscale("asinh", linear_width=cfg.asinh_linear_width)
-            ax.set_yscale("asinh", linear_width=cfg.asinh_linear_width)
-            ticks = [-1.0, -0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0]
-            ax.set_xticks(ticks)
-            ax.set_yticks(ticks)
-            ax.xaxis.set_minor_locator(mticker.NullLocator())
-            ax.yaxis.set_minor_locator(mticker.NullLocator())
-
         fmt = mticker.FuncFormatter(lambda v, _: f"{v:+.2f}".rstrip("0").rstrip("."))
         ax.xaxis.set_major_formatter(fmt)
         ax.yaxis.set_major_formatter(fmt)
@@ -228,7 +217,7 @@ def render(result: RRGResult, path: str | Path | None = None) -> Path:
 
     footer = cfg.stamp()
     if cfg.is_absolute and result.scale_ratio:
-        footer += f"  |  {cfg.axis_scale} axes, frame ±{cfg.frame_limit:g}"
+        footer += f"  |  frame ±{cfg.frame_limit:g}"
         footer += (f"  |  scale x{result.scale_ratio:.3f} y{result.scale_momentum:.3f}")
     if result.dropped:
         footer += f"  |  dropped: {', '.join(sorted(result.dropped))}"

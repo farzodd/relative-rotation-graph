@@ -38,8 +38,6 @@ def make_config(**overrides) -> Config:
         figure_height=9.0,
         dpi=160,
         frame_limit=1.25,
-        axis_scale="linear",
-        asinh_linear_width=0.35,
     )
     base.update(overrides)
     return Config(**base)

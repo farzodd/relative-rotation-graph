@@ -182,13 +182,12 @@ def test_non_absolute_frame_still_fits_the_data():
     assert (lo, hi) != (-1.25, 1.25)
 
 
-@pytest.mark.parametrize("axis_scale", ["linear", "asinh"])
-def test_render_succeeds_with_off_scale_members(tmp_path, axis_scale):
+def test_render_succeeds_with_off_scale_members(tmp_path):
     """A member outside the fixed frame must render, not crash or vanish."""
     from rrg.chart import render
 
     cfg = make_config(
-        normalization="absolute", axis_scale=axis_scale,
+        normalization="absolute",
         frame_limit=0.2,  # deliberately tight so members fall outside
         output_dir=tmp_path,
     )
@@ -196,11 +195,11 @@ def test_render_succeeds_with_off_scale_members(tmp_path, axis_scale):
     outside = ((result.rs_ratio.iloc[-1] - 100).abs() > 0.2).any()
     assert outside, "fixture should put someone off-scale"
 
-    path = render(result, tmp_path / f"off_{axis_scale}.png")
+    path = render(result, tmp_path / "off_scale.png")
     assert path.exists() and path.stat().st_size > 5000
 
 
-def test_rejects_bad_axis_scale_and_percentile(tmp_path):
+def test_rejects_bad_percentile_and_frame(tmp_path):
     import textwrap
 
     base = """
@@ -227,8 +226,6 @@ def test_rejects_bad_axis_scale_and_percentile(tmp_path):
         path.write_text(textwrap.dedent(base).format(extra=extra, chart_extra=chart_extra))
         return path
 
-    with pytest.raises(ConfigError, match="axis_scale"):
-        load_config(write(chart_extra='axis_scale = "log"'))
     with pytest.raises(ConfigError, match="scale_percentile"):
         load_config(write(extra="scale_percentile = 0"))
     with pytest.raises(ConfigError, match="scale_percentile"):

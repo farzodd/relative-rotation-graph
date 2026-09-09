@@ -46,8 +46,6 @@ class Config:
     figure_height: float
     dpi: int
     frame_limit: float
-    axis_scale: str
-    asinh_linear_width: float
 
     root: Path = field(default_factory=Path.cwd)
     profile: str = ""
@@ -182,8 +180,6 @@ def load_config(
         figure_height=float(chart.get("figure_height", 9.0)),
         dpi=int(chart.get("dpi", 160)),
         frame_limit=float(chart.get("frame_limit", 1.25)),
-        axis_scale=chart.get("axis_scale", "linear"),
-        asinh_linear_width=float(chart.get("asinh_linear_width", 0.35)),
         root=root,
         profile=profile or "",
         profile_description=profile_description,
@@ -211,10 +207,6 @@ def _validate(cfg: Config) -> None:
         )
     if min(cfg.ema_short, cfg.ema_long, cfg.ema_momentum) < 2:
         raise ConfigError("config.toml: EMA spans must be >= 2")
-    if cfg.axis_scale not in ("linear", "asinh"):
-        raise ConfigError(
-            f"config.toml: axis_scale {cfg.axis_scale!r} not 'linear' or 'asinh'"
-        )
     if not 0 < cfg.scale_percentile <= 100:
         raise ConfigError(
             f"config.toml: scale_percentile must be in (0, 100], got {cfg.scale_percentile}"

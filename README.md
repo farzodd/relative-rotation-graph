@@ -139,27 +139,6 @@ both had to be fixed:
   comparable. Members outside it are drawn on the boundary as hollow triangles
   captioned with their true coordinate, never dropped.
 
-### Non-linear axes
-
-`axis_scale = "asinh"` is linear near the origin and logarithmic further out,
-expanding the cluster near the benchmark while still fitting large moves. asinh
-rather than log because it is defined through zero, which the coordinates
-require.
-
-The cost is proportionality: distances and rotation angles are no longer to
-scale, so a straight move renders curved and tail lengths are not comparable
-between the middle and the edge. Since an RRG is read through tail direction and
-speed, `linear` remains the default — percentile scaling and the fixed frame
-already recover most of the legibility without distorting the geometry.
-
-The divisor is recomputed from the loaded history on each run, so it drifts
-slowly as data accumulates, and it is stamped on the chart footer. A *rolling*
-divisor was considered and rejected: re-scaling by something that moves would
-reintroduce the exact defect above, in the time dimension rather than the
-cross-section.
-
-The two modes answer different questions. Absolute: "should I be in this asset
-class at all." Cross-sectional: "which member within it." Run both.
 
 ## Configuration
 
@@ -253,14 +232,14 @@ The bare command gives the **absolute** view: each member measured against the
 benchmark, which sits on the origin.
 
 ```
-uv run rrg --profile fast     # one named profile
+uv run rrg --profile abs_fast # one named profile
 uv run rrg --benchmark RSP    # override the benchmark without editing config
 uv run rrg --all-profiles     # every profile, plus a diagnostics comparison
 uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 74 tests
+uv run pytest                 # 73 tests
 ```
 
 ## Profiles
@@ -270,13 +249,20 @@ sharing the universe, benchmark, bar interval, and data source — so the output
 are the same data seen at different speeds, and stay comparable. A profile that
 tried to change the universe is rejected at load.
 
-| Profile | EMA | Tail | Intent |
+| Profile | Basis | EMA | Tail |
 |---|---|---|---|
-| `fast` | 5/15/5 | 8 | Crosses quadrant boundaries early, accepts more false crossings |
-| `balanced` | 10/30/10 | 12 | The original specification |
-| `absolute` | 10/30/10 | 12 | Measured against the benchmark, not peers |
-| `absolute_fast` | 5/15/5 | 8 | Absolute basis, earliest read |
-| `absolute_asinh` | 10/30/10 | 12 | Absolute on non-linear axes |
+| `(none)` | absolute | 10/30/10 | 12 |
+| `abs_balanced` | absolute | 10/30/10 | 12 |
+| `abs_fast` | absolute | 5/15/5 | 8 |
+| `cross_balanced` | cross-sectional | 10/30/10 | 12 |
+| `cross_fast` | cross-sectional | 5/15/5 | 8 |
+
+Two dimensions, both spelled out in the name so a profile cannot mean something
+its name does not say. `abs_*` measures against the benchmark and lets the whole
+universe lag at once; `cross_*` measures against the peer group, which
+re-centres every bar. `*_fast` crosses quadrant boundaries earlier at roughly
+double the reversal rate. `abs_balanced` repeats the default on purpose, so
+every view has a name.
 
 ### Choosing between them
 

@@ -103,15 +103,6 @@ output_dir = "output"
 # boundary as hollow triangles with their true coordinate in the label.
 frame_limit = 1.25
 
-# "linear" keeps distance proportional to movement, so tail length and rotation
-# angle mean what they look like.
-# "asinh" is linear near the origin and logarithmic further out: it un-compresses
-# the clustered middle while still fitting large moves on screen. The cost is
-# that distances and angles are no longer proportional — a straight move renders
-# curved, and tail lengths are not comparable between the middle and the edge.
-axis_scale = "linear"
-# Width of the asinh transform's linear region, in axis units.
-asinh_linear_width = 0.35
 figure_width = 11.0
 figure_height = 9.0
 dpi = 160
@@ -120,62 +111,48 @@ dpi = 160
 # Profiles
 # --------------------------------------------------------------------------
 # Named overrides of [method] and [chart]. Everything else — universe,
-# benchmark, bar interval, data source — is shared, so the three views are
-# genuinely the same data seen at different speeds and stay comparable.
+# benchmark, bar interval, data source — is shared.
 #
-# The tradeoff they span is responsiveness against stability. A shorter EMA
-# pair crosses quadrant boundaries earlier and more often; some of those extra
-# crossings are real rotations caught early and some are noise, and no setting
-# separates the two in advance. Compare them on the diagnostics table, not on
-# which chart looks tidier.
+# Two dimensions, spelled out in every name so a profile cannot mean something
+# its name does not say:
+#
+#   abs_*   measured against the benchmark; the whole universe can lag at once
+#   cross_* measured against the peer group; the universe re-centres every bar
+#   *_balanced  EMA 10/30/10, tail 12
+#   *_fast      EMA 5/15/5,  tail 8 — earlier crossings, roughly double the
+#               reversal rate (30% vs 15%; see --all-profiles)
+#
+# abs_balanced repeats the default deliberately, so the list is complete and
+# every view has a name.
 
-[profiles.fast]
-description = "Peer-relative, quadrant-entry optimised: crosses early, more false crossings."
-normalization = "cross_sectional"
-ema_short = 5
-ema_long = 15
-ema_momentum = 5
-tail_length = 8
-
-[profiles.balanced]
-description = "Peer-relative at moderate speed. The settings this project was specified with."
-normalization = "cross_sectional"
-ema_short = 10
-ema_long = 30
-ema_momentum = 10
-tail_length = 12
-
-# Same speed as `balanced`, different question. The three profiles above ask
-# "which member is rotating where relative to the others"; this one asks "is any
-# of them beating the benchmark at all". Its coordinates are not comparable with
-# the others' — only with its own history.
-[profiles.absolute]
-description = "Measured against the benchmark, not against peers. Everything can lag at once."
+[profiles.abs_balanced]
+description = "Against the benchmark, moderate speed. Same as the default."
 normalization = "absolute"
 ema_short = 10
 ema_long = 30
 ema_momentum = 10
 tail_length = 12
 
-# Same numbers as `absolute`, drawn on a non-linear axis: linear near the origin,
-# logarithmic further out. Un-compresses the cluster near the benchmark at the
-# cost of proportionality — distances and rotation angles are no longer to scale.
-[profiles.absolute_asinh]
-description = "Absolute, asinh axes: expands the centre, distorts distances."
-normalization = "absolute"
-axis_scale = "asinh"
-ema_short = 10
-ema_long = 30
-ema_momentum = 10
-tail_length = 12
-
-# Absolute basis at the fast profile's speed. The reactive view: is anything
-# beating the benchmark, answered as early as the data allows.
-[profiles.absolute_fast]
-description = "Absolute basis, fast EMAs. Earliest read on whether anything is beating the benchmark."
+[profiles.abs_fast]
+description = "Against the benchmark, reacts earlier at the cost of more false crossings."
 normalization = "absolute"
 ema_short = 5
 ema_long = 15
 ema_momentum = 5
 tail_length = 8
 
+[profiles.cross_balanced]
+description = "Against the peer group, moderate speed."
+normalization = "cross_sectional"
+ema_short = 10
+ema_long = 30
+ema_momentum = 10
+tail_length = 12
+
+[profiles.cross_fast]
+description = "Against the peer group, reacts earlier at the cost of more false crossings."
+normalization = "cross_sectional"
+ema_short = 5
+ema_long = 15
+ema_momentum = 5
+tail_length = 8

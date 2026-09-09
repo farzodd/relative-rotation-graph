@@ -24,6 +24,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", default=None, help="output PNG path")
     parser.add_argument("-p", "--profile", default=None, help="named profile from config.toml")
     parser.add_argument(
+        "-b", "--benchmark", default=None,
+        help="override the benchmark (e.g. RSP) without editing config.toml",
+    )
+    parser.add_argument(
         "--all-profiles",
         action="store_true",
         help="render every profile and print a comparison of their diagnostics",
@@ -60,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run_all_profiles(args)
 
     try:
-        cfg = load_config(args.config, profile=args.profile)
+        cfg = load_config(args.config, profile=args.profile, benchmark=args.benchmark)
         panel = build_price_panel(cfg, use_cache=not args.no_cache)
         result = compute(panel, cfg)
     except (ConfigError, DataError, ValueError) as exc:
@@ -127,7 +131,7 @@ def _run_all_profiles(args) -> int:
     rows, forwards, charts = [], {}, []
     for name in names:
         try:
-            cfg = load_config(args.config, profile=name)
+            cfg = load_config(args.config, profile=name, benchmark=args.benchmark)
             panel = build_price_panel(cfg, use_cache=not args.no_cache)
             result = compute(panel, cfg)
         except (ConfigError, DataError, ValueError) as exc:

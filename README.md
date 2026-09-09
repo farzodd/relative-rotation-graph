@@ -196,6 +196,29 @@ At the settings above that is 132 weekly bars, ~2.5 years, which is why
 `lookback_years = 5`. Cross-sectional needs no z-score window because it scores
 across the universe on each date rather than across history.
 
+### Choice of benchmark
+
+The benchmark should be whatever you would hold instead — it defines what
+"beating the market" means for the chart.
+
+SPY is cap-weighted, and over 2021-09 to 2026-09 it returned **+80.9%** against
+equal-weighted RSP's **+50.1%** — a 30.7 percentage point concentration premium.
+That is why most sectors show as lagging: they are measured against an index a
+handful of mega-caps are carrying. XLK and SMH are themselves inside that
+concentration, so measuring them against SPY understates them; XLK's edge is
++35.3% vs SPY but +63.0% vs RSP.
+
+Switching benchmark does not reorder the field, though. Measured across 143
+weeks, the cross-sectional rank correlation of RS-Ratio between the two
+benchmarks is **+0.998**, and at the latest bar all 13 members landed in the
+same quadrant under both. What it does is shift everyone by a near-common
+amount, which flips members sitting close to a boundary — quadrant agreement
+across the full history is only **67.8%**.
+
+So the benchmark is second-order for anything clearly ahead or behind, and
+decisive for anything near the line. Pick the one you would actually hold, and
+use `--benchmark` to check how much of a borderline call depends on it.
+
 ## Data handling
 
 - Adjusted closes unless stated otherwise.
@@ -213,12 +236,13 @@ Writes a PNG to `output/` and prints the current position of every symbol.
 
 ```
 uv run rrg --profile fast     # one named profile
+uv run rrg --benchmark RSP    # override the benchmark without editing config
 uv run rrg --all-profiles     # every profile, plus a diagnostics comparison
 uv run rrg --diagnostics      # stability statistics for a single run
 uv run rrg --explain XLK      # every intermediate, for hand-checking
 uv run rrg --no-chart         # summary table only
 uv run rrg --no-cache         # ignore cached prices and refetch
-uv run pytest                 # 67 tests
+uv run pytest                 # 70 tests
 ```
 
 ## Profiles
@@ -232,8 +256,9 @@ tried to change the universe is rejected at load.
 |---|---|---|---|
 | `fast` | 5/15/5 | 8 | Crosses quadrant boundaries early, accepts more false crossings |
 | `balanced` | 10/30/10 | 12 | The original specification |
-| `slow` | 13/40/13 | 16 | Smooth, legible tails; later signals |
 | `absolute` | 10/30/10 | 12 | Measured against the benchmark, not peers |
+| `absolute_fast` | 5/15/5 | 8 | Absolute basis, earliest read |
+| `absolute_asinh` | 10/30/10 | 12 | Absolute on non-linear axes |
 
 ### Choosing between them
 

@@ -105,13 +105,6 @@ def test_other_modes_record_no_scale():
     assert result.scale_ratio is None and result.scale_momentum is None
 
 
-def test_absolute_needs_no_zscore_window_in_its_warmup():
-    absolute = make_config(normalization="absolute")
-    series = make_config(normalization="time_series", zscore_window=60)
-    assert absolute.warmup_bars() < series.warmup_bars()
-    assert absolute.warmup_bars() == make_config().warmup_bars()
-
-
 def test_absolute_works_with_a_single_member(tmp_path):
     """Cross-sectional needs a peer group; absolute needs only the benchmark."""
     panel = losers_panel(k=1)

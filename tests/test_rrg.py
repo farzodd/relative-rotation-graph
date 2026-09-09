@@ -13,7 +13,7 @@ import pytest
 
 from rrg.config import Config
 from rrg.data import PricePanel
-from rrg.rrg import _zscore_cross_sectional, _zscore_time_series, classify, compute
+from rrg.rrg import _zscore_cross_sectional, classify, compute
 
 
 def make_config(**overrides) -> Config:
@@ -31,7 +31,6 @@ def make_config(**overrides) -> Config:
         ema_long=30,
         ema_momentum=10,
         normalization="cross_sectional",
-        zscore_window=60,
         sigma_multiple=2.0,
         scale_percentile=100.0,
         tail_length=5,
@@ -201,15 +200,6 @@ def test_near_flat_cross_section_is_not_amplified_into_noise():
     assert scored.iloc[0].abs().max() == 0.0
 
 
-def test_constant_series_under_time_series_scores_zero_not_nan():
-    """A complete but flat window is 'no signal', which is not the same as
-    'not enough data yet'."""
-    frame = pd.DataFrame({"A": [50.0] * 80})
-    scored = _zscore_time_series(frame, window=60)
-    assert scored["A"].iloc[:59].isna().all()   # window not yet full
-    assert (scored["A"].iloc[59:] == 0.0).all()  # full, but no dispersion
-
-
 def test_momentum_is_ratio_against_its_own_ema():
     """Step 4, checked against the implementation's own RS_Ratio output."""
     panel = make_panel()
@@ -290,15 +280,6 @@ def test_warmup_bars_are_not_plotted():
     expected_drop = cfg.warmup_bars() - cfg.tail_length
     assert len(result.rs_ratio) == len(panel.prices) - expected_drop
     assert result.rs_ratio.notna().all().all()
-
-
-def test_time_series_normalization_leaves_no_nans():
-    cfg = make_config(normalization="time_series", zscore_window=60)
-    result = compute(make_panel(n=500), cfg)
-    assert result.rs_ratio.notna().all().all()
-    assert result.rs_momentum.notna().all().all()
-    # Unlike cross-sectional, nothing forces the universe to centre on 100.
-    assert not np.allclose(result.rs_ratio.mean(axis=1).to_numpy(), 100.0)
 
 
 def test_tail_has_configured_length():

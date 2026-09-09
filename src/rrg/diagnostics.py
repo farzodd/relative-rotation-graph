@@ -1,14 +1,8 @@
 """Measure how a parameterization behaves, so profiles can be compared on numbers.
 
-These are descriptive statistics about the *chart*, not about a strategy. They
-answer "does this setting produce a stable, legible signal", which is a property
-of the indicator and is knowable from the data in hand.
-
-They do NOT answer "does this setting make money". Forward-return figures are
-included because a signal nobody can act on is not interesting, but they come
-from a single five-year window on one universe, ignore costs, slippage, and
-option mechanics, and are not a backtest. Treat them as a description of what
-happened, never as evidence of an edge.
+These describe the *chart*: whether a setting produces a stable, legible signal.
+That is a property of the indicator and is knowable from the data in hand. None
+of it says anything about whether the chart predicts returns.
 """
 
 from __future__ import annotations
@@ -18,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .rrg import QUADRANTS, RRGResult, classify
+from .rrg import RRGResult, classify
 
 
 @dataclass
@@ -32,7 +26,6 @@ class ProfileDiagnostics:
     median_dwell_weeks: float
     reversal_rate: float
     momentum_spread: float
-    forward_return: pd.Series  # median forward relative return by entry quadrant
 
     def as_row(self) -> dict:
         return {
@@ -74,9 +67,7 @@ def _runs(labels: list[str]) -> list[tuple[str, int, int]]:
     return runs
 
 
-def compute_diagnostics(
-    result: RRGResult, reversal_window: int = 4, forward_window: int = 4
-) -> ProfileDiagnostics:
+def compute_diagnostics(result: RRGResult, reversal_window: int = 4) -> ProfileDiagnostics:
     """Stability and responsiveness statistics for one parameterization.
 
     `reversal_window` — bars within which returning to the previous quadrant
@@ -127,31 +118,5 @@ def compute_diagnostics(
         median_dwell_weeks=median_dwell,
         reversal_rate=reversal_rate,
         momentum_spread=momentum_spread,
-        forward_return=forward_relative_return(result, quadrants, forward_window),
     )
 
-
-def forward_relative_return(
-    result: RRGResult, quadrants: pd.DataFrame, window: int = 4
-) -> pd.Series:
-    """Median forward relative return after *entering* each quadrant.
-
-    Descriptive only. One window, one universe, no costs. See module docstring.
-    """
-    # Relative strength is the security against the benchmark; its forward
-    # change is what a rotation into this quadrant would have "captured".
-    rs = result.rs
-    forward = rs.shift(-window) / rs - 1.0
-
-    buckets: dict[str, list[float]] = {q: [] for q in QUADRANTS}
-    for symbol in result.symbols:
-        labels = list(quadrants[symbol])
-        for label, start, _ in _runs(labels)[1:]:  # skip the first, it is not an entry
-            value = forward[symbol].iloc[start]
-            if np.isfinite(value):
-                buckets[label].append(value)
-
-    return pd.Series(
-        {q: (float(np.median(v)) * 100 if v else float("nan")) for q, v in buckets.items()},
-        name=f"median fwd {window}w rel return %",
-    )

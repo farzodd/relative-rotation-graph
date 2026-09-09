@@ -138,21 +138,6 @@ def _zscore_cross_sectional(frame: pd.DataFrame) -> pd.DataFrame:
     return scored
 
 
-def _zscore_time_series(frame: pd.DataFrame, window: int) -> pd.DataFrame:
-    """Score each column against its own trailing history.
-
-    Rows whose trailing window is incomplete stay NaN and are dropped later; a
-    complete but flat window scores 0, which is information, not absence.
-    """
-    rolling = frame.rolling(window=window, min_periods=window)
-    mean = rolling.mean()
-    std = rolling.std(ddof=0)
-    has_spread = std > _ZERO_DISPERSION * mean.abs().clip(lower=1.0)
-
-    scored = (frame - mean) / std.where(has_spread)
-    return scored.mask(~has_spread & mean.notna(), 0.0)
-
-
 def absolute_scale(frame: pd.DataFrame, cfg: Config, warmup: int = 0) -> float:
     """Axis unit for absolute mode: a sigma_multiple-sigma move of the widest member.
 
@@ -185,9 +170,7 @@ def _normalize(frame: pd.DataFrame, cfg: Config, scale: float | None = None) -> 
         # Deviation from the benchmark, in axis units. A member matching the
         # benchmark sits at exactly 100; every member can be below it at once.
         return 100.0 + (frame - 100.0) / (scale or 1.0)
-    if cfg.is_cross_sectional:
-        return 100.0 + _zscore_cross_sectional(frame)
-    return 100.0 + _zscore_time_series(frame, cfg.zscore_window)
+    return 100.0 + _zscore_cross_sectional(frame)
 
 
 def compute(panel: PricePanel, cfg: Config) -> RRGResult:
@@ -222,8 +205,7 @@ def compute(panel: PricePanel, cfg: Config) -> RRGResult:
     frames = [rs, raw_ratio, rs_ratio, raw_momentum, rs_momentum]
     trimmed = [f.iloc[warmup:] for f in frames]
 
-    # Belt and braces: time-series normalization leaves NaNs for its own window,
-    # and those rows must not reach the chart.
+    # Rows that could not be computed must not reach the chart.
     valid = trimmed[2].notna().all(axis=1) & trimmed[4].notna().all(axis=1)
     trimmed = [f.loc[valid] for f in trimmed]
 

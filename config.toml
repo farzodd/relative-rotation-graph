@@ -63,7 +63,6 @@ ema_momentum = 10
 
 
 # "cross_sectional" scores each security against its peers on each date.
-# "time_series"    scores each security against its own history.
 # "absolute"       divides by a constant, so position is measured against the
 #                  benchmark rather than against peers.
 # These are not comparable. Do not mix them across runs.
@@ -73,8 +72,6 @@ ema_momentum = 10
 # set normalization explicitly rather than inheriting it.
 normalization = "absolute"
 
-# Only used when normalization = "time_series". Ignored otherwise.
-zscore_window = 60
 
 # Absolute mode only. The axis unit is a `sigma_multiple`-sigma move of whichever
 # member has the widest dispersion, so +-1.0 is the edge of that move and the

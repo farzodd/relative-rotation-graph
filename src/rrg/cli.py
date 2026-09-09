@@ -9,8 +9,9 @@ import sys
 import pandas as pd
 
 from .chart import render
-from .config import ConfigError, load_config
+from .config import ConfigError, load_config, profile_names
 from .data import DataError, build_price_panel
+from .diagnostics import compute_diagnostics
 from .rrg import compute
 
 
@@ -21,6 +22,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-c", "--config", default="config.toml", help="path to config.toml")
     parser.add_argument("-o", "--output", default=None, help="output PNG path")
+    parser.add_argument("-p", "--profile", default=None, help="named profile from config.toml")
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help="render every profile and print a comparison of their diagnostics",
+    )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="print stability/responsiveness statistics for the run",
+    )
     parser.add_argument(
         "--explain",
         metavar="SYMBOL",
@@ -44,8 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s: %(message)s",
     )
 
+    if args.all_profiles:
+        return _run_all_profiles(args)
+
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config, profile=args.profile)
         panel = build_price_panel(cfg, use_cache=not args.no_cache)
         result = compute(panel, cfg)
     except (ConfigError, DataError, ValueError) as exc:
@@ -76,10 +91,70 @@ def main(argv: list[str] | None = None) -> int:
               f"({len(result.symbols)} symbols, {cfg.normalization}):\n")
         print(latest.to_string())
 
+    if args.diagnostics:
+        diag = compute_diagnostics(result)
+        print(f"\nDiagnostics ({diag.profile}, {diag.bars} bars):")
+        for key, value in diag.as_row().items():
+            if key != "profile":
+                print(f"  {key:20} {value}")
+        print(f"\n{diag.forward_return.round(2).to_string()}")
+        print(_FORWARD_CAVEAT)
+
     if not args.no_chart:
         path = render(result, args.output)
         print(f"\nChart: {path}")
 
+    return 0
+
+
+_FORWARD_CAVEAT = (
+    "\n  Forward returns are descriptive: one 5y window, one universe, no costs\n"
+    "  or option mechanics. They describe what happened, not an edge."
+)
+
+
+def _run_all_profiles(args) -> int:
+    """Render every profile off one data fetch and compare their diagnostics."""
+    try:
+        names = profile_names(args.config)
+    except (OSError, ConfigError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if not names:
+        print("error: no [profiles.*] declared in config.toml", file=sys.stderr)
+        return 1
+
+    rows, forwards, charts = [], {}, []
+    for name in names:
+        try:
+            cfg = load_config(args.config, profile=name)
+            panel = build_price_panel(cfg, use_cache=not args.no_cache)
+            result = compute(panel, cfg)
+        except (ConfigError, DataError, ValueError) as exc:
+            print(f"error in profile {name!r}: {exc}", file=sys.stderr)
+            return 1
+
+        diag = compute_diagnostics(result)
+        rows.append(diag.as_row())
+        forwards[name] = diag.forward_return
+        if not args.no_chart:
+            charts.append(render(result))
+
+        print(f"\n=== {name} — {cfg.profile_description}")
+        latest = result.latest()
+        with pd.option_context("display.float_format", lambda v: f"{v:.2f}"):
+            print(latest.to_string())
+
+    print("\n\nProfile comparison")
+    print(pd.DataFrame(rows).set_index("profile").to_string())
+    print("\nMedian forward 4-week relative return by quadrant entered (%)")
+    print(pd.DataFrame(forwards).round(2).to_string())
+    print(_FORWARD_CAVEAT)
+
+    if charts:
+        print("\nCharts:")
+        for path in charts:
+            print(f"  {path}")
     return 0
 
 
